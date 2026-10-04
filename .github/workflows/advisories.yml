@@ -3,6 +3,11 @@ on:
   schedule:
     - cron: "27 7 * * 1"
   workflow_dispatch:
+    inputs:
+      revision:
+        description: "Commit or tag to audit (defaults to the selected branch)"
+        required: false
+        type: string
   pull_request:
     paths:
       - "**/Cargo.lock"
@@ -21,6 +26,8 @@ jobs:
         directory: [".", website]
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision || github.sha }}
       - uses: actions/setup-node@v4
         with:
           node-version-file: .node-version
@@ -31,10 +38,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision || github.sha }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
           manifest-path: src-tauri/Cargo.toml
           rust-version: "1.95.0"
-          arguments: --locked
+          arguments: --locked --config src-tauri/deny.toml
           command: check
-          command-arguments: --config src-tauri/deny.toml advisories
+          command-arguments: advisories
