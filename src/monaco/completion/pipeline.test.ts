@@ -8,10 +8,9 @@
  * would actually live.
  */
 
-import { PostgreSQL } from "dt-sql-parser";
 import { describe, expect, it } from "vitest";
 import { buildCompletions } from "./build";
-import { readExpectation, readScope } from "./service";
+import { createCompletionParser } from "./parse";
 import type { Catalog, IndexedColumn, IndexedRelation } from "./types";
 
 function column(name: string, over: Partial<IndexedColumn> = {}): IndexedColumn {
@@ -72,14 +71,18 @@ function complete(marked: string) {
   const position = { lineNumber, column };
   const wordRange = wordRangeAt(lines[lines.length - 1], lineNumber, column);
 
-  const parser = new PostgreSQL();
-  const suggestion = parser.getSuggestionAtCaretPosition(sql, position);
-  const entities = parser.getAllEntities(sql, position);
+  const parsed = createCompletionParser()({
+    document: "test",
+    version: 1,
+    sql,
+    caret: position,
+    wordRange,
+  });
 
   return buildCompletions({
-    expectation: readExpectation((suggestion?.syntax ?? []) as never, position, wordRange),
-    keywords: suggestion?.keywords ?? [],
-    scope: readScope(entities as never),
+    expectation: parsed?.expectation ?? { kinds: [], qualifier: [], range: wordRange },
+    keywords: parsed?.keywords ?? [],
+    scope: parsed?.scope ?? [],
     catalog: CATALOG,
     snippets: [],
   });

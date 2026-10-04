@@ -1,24 +1,13 @@
-/**
- * Registers SQL completion directly on the editor's own Monaco instance.
- *
- * The library can supply completions through its worker, but that path depends
- * on a lazy `onLanguage` registration, a worker resolving under the right label,
- * and the library and the app agreeing on one Monaco instance. Parsing here
- * instead removes all three: the code path that runs is the one
- * `pipeline.test.ts` exercises. A statement of a few hundred characters parses
- * in about 2ms, which is affordable for a user-triggered request.
- */
-
-import { PostgreSQL } from "dt-sql-parser";
 import type * as Monaco from "monaco-editor";
 import { useProjectStore } from "@/stores/project-store";
 import { catalogFor, useSchemaIndexStore } from "@/stores/schema-index-store";
 import { useTabStore } from "@/stores/tab-store";
 import { buildCompletions } from "./build";
 import { neededSchema, withTimeout } from "./pending";
-import { readExpectation, readScope, toMonacoItem } from "./service";
+import { toMonacoItem } from "./service";
 import { SQL_SNIPPETS } from "./snippets";
 import type { Catalog, CompletionRange } from "./types";
+import { CompletionWorkerClient } from "./worker-client";
 
 /** Beyond this the parse stops being cheap enough to run per request. */
 const MAX_PARSED_CHARS = 200_000;
@@ -68,14 +57,6 @@ const STATEMENT_START_KEYWORDS = [
   "VALUES",
 ];
 
-/** Reused: constructing a parser rebuilds ANTLR state for nothing. */
-let parser: PostgreSQL | null = null;
-
-function getParser(): PostgreSQL {
-  parser ??= new PostgreSQL();
-  return parser;
-}
-
 const EMPTY_CATALOG: Catalog = {
   defaultSchema: "public",
   schemas: () => [],
@@ -111,9 +92,16 @@ let registration: Monaco.IDisposable | null = null;
 
 export function registerCompletion(monaco: typeof Monaco): Monaco.IDisposable {
   registration?.dispose();
-  registration = monaco.languages.registerCompletionItemProvider("pgsql", {
+  const parser = new CompletionWorkerClient();
+  const requests = new WeakMap<Monaco.editor.ITextModel, number>();
+  let sequence = 0;
+  const provider = monaco.languages.registerCompletionItemProvider("pgsql", {
     triggerCharacters: ["."],
     provideCompletionItems: async (model, position, _context, token) => {
+      const request = ++sequence;
+      requests.set(model, request);
+      let isCurrent = () =>
+        !token.isCancellationRequested && requests.get(model) === request && !model.isDisposed?.();
       // The span the editor considers to be the word under the caret. Used
       // whenever the parser reports no range of its own.
       const typed = model.getWordUntilPosition(position);
@@ -128,25 +116,40 @@ export function registerCompletion(monaco: typeof Monaco): Monaco.IDisposable {
         const sql = model.getValue();
         if (sql.length > MAX_PARSED_CHARS) return { suggestions: [] };
 
-        const caret = { lineNumber: position.lineNumber, column: position.column };
-        const sqlParser = getParser();
-        const suggestion = sqlParser.getSuggestionAtCaretPosition(sql, caret);
-        if (token.isCancellationRequested) return { suggestions: [] };
-        // An empty document parses to nothing, so the grammar cannot say what
-        // may start a statement. Answer that one case ourselves.
-        if (!suggestion) return { suggestions: fallbackItems(monaco, wordRange) };
-
-        const entities = sqlParser.getAllEntities(sql, caret);
-        if (token.isCancellationRequested) return { suggestions: [] };
-
+        if (!sql.trim()) return { suggestions: fallbackItems(monaco, wordRange) };
+        const version = model.getVersionId();
         const { tabs, selectedTabIndex } = useTabStore.getState();
+        const tabId = tabs[selectedTabIndex]?.id;
         const projectId = tabs[selectedTabIndex]?.projectId;
+        isCurrent = () => {
+          const state = useTabStore.getState();
+          const tab = state.tabs[state.selectedTabIndex];
+          return (
+            !token.isCancellationRequested &&
+            requests.get(model) === request &&
+            !model.isDisposed() &&
+            model.getVersionId() === version &&
+            tab?.id === tabId &&
+            tab?.projectId === projectId
+          );
+        };
+        const parsed = await parser.parse(
+          {
+            document: model.uri.toString(),
+            version,
+            sql,
+            caret: { lineNumber: position.lineNumber, column: position.column },
+            wordRange,
+          },
+          token,
+        );
+        if (!isCurrent()) return { suggestions: [] };
+        if (!parsed) return { suggestions: fallbackItems(monaco, wordRange) };
+        const { expectation } = parsed;
+        const scope = projectId ? parsed.scope : [];
 
         const schemas = projectId ? (useProjectStore.getState().schemas[projectId] ?? []) : [];
         const defaultSchema = schemas.includes("public") ? "public" : (schemas[0] ?? "public");
-
-        const expectation = readExpectation(suggestion.syntax as never, caret, wordRange);
-        const scope = projectId ? readScope(entities as never) : [];
 
         let pending = false;
         if (projectId) {
@@ -157,7 +160,7 @@ export function registerCompletion(monaco: typeof Monaco): Monaco.IDisposable {
           // keystroke would just stall the editor for nothing.
           if (wanted && store.isWorthWaitingFor(projectId, wanted)) {
             await withTimeout(store.ensureIndex(projectId, wanted), INDEX_WAIT_MS);
-            if (token.isCancellationRequested) return { suggestions: [] };
+            if (!isCurrent()) return { suggestions: [] };
             pending = useSchemaIndexStore.getState().isPending(projectId, wanted);
           } else if (wanted && store.isPending(projectId, wanted)) {
             void store.ensureIndex(projectId, wanted);
@@ -167,7 +170,7 @@ export function registerCompletion(monaco: typeof Monaco): Monaco.IDisposable {
 
         const items = buildCompletions({
           expectation,
-          keywords: suggestion.keywords ?? [],
+          keywords: parsed.keywords,
           // Without a connected project there is no catalog, but the grammar's
           // keywords and the snippets are still worth offering.
           scope,
@@ -182,11 +185,18 @@ export function registerCompletion(monaco: typeof Monaco): Monaco.IDisposable {
           incomplete: pending,
         };
       } catch (error) {
+        if (!isCurrent()) return { suggestions: [] };
         console.error("[rsql] SQL completion failed", error);
         return { suggestions: fallbackItems(monaco, wordRange) };
       }
     },
   });
 
+  registration = {
+    dispose: () => {
+      provider.dispose();
+      parser.dispose();
+    },
+  };
   return registration;
 }

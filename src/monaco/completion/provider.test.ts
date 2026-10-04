@@ -1,6 +1,14 @@
 import { describe, expect, it, vi } from "vitest";
 import { registerCompletion } from "./provider";
 
+const { parse } = vi.hoisted(() => ({ parse: vi.fn() }));
+vi.mock("./worker-client", () => ({
+  CompletionWorkerClient: class {
+    parse = parse;
+    dispose() {}
+  },
+}));
+
 /**
  * Just enough Monaco to observe registration. The provider's suggestions are
  * covered by build and pipeline tests; what matters here is that hot reload
@@ -35,6 +43,74 @@ function fakeMonaco() {
 }
 
 describe("registerCompletion", () => {
+  it("discards a response after the model changes", async () => {
+    const { monaco, registered } = fakeMonaco();
+    registerCompletion(monaco);
+    const provider = registered[0] as {
+      provideCompletionItems(...args: unknown[]): Promise<{ suggestions: unknown[] }>;
+    };
+    let version = 1;
+    let resolve!: (result: null) => void;
+    parse.mockReturnValueOnce(
+      new Promise((done) => {
+        resolve = done;
+      }),
+    );
+    const model = {
+      getValue: () => "SELECT id FROM users",
+      getWordUntilPosition: () => ({ startColumn: 8, endColumn: 10 }),
+      getVersionId: () => version,
+      isDisposed: () => false,
+      uri: { toString: () => "query" },
+    };
+    const result = provider.provideCompletionItems(
+      model,
+      { lineNumber: 1, column: 10 },
+      {},
+      { isCancellationRequested: false },
+    );
+    version++;
+    resolve(null);
+    expect((await result).suggestions).toEqual([]);
+  });
+
+  it("discards an earlier caret request even if the document version is unchanged", async () => {
+    const { monaco, registered } = fakeMonaco();
+    registerCompletion(monaco);
+    const provider = registered[0] as {
+      provideCompletionItems(...args: unknown[]): Promise<{ suggestions: unknown[] }>;
+    };
+    let resolve!: (result: null) => void;
+    parse
+      .mockReturnValueOnce(
+        new Promise((done) => {
+          resolve = done;
+        }),
+      )
+      .mockResolvedValueOnce(null);
+    const model = {
+      getValue: () => "SELECT id FROM users",
+      getWordUntilPosition: () => ({ startColumn: 8, endColumn: 10 }),
+      getVersionId: () => 1,
+      isDisposed: () => false,
+      uri: { toString: () => "query" },
+    };
+    const first = provider.provideCompletionItems(
+      model,
+      { lineNumber: 1, column: 10 },
+      {},
+      { isCancellationRequested: false },
+    );
+    const second = await provider.provideCompletionItems(
+      model,
+      { lineNumber: 1, column: 11 },
+      {},
+      { isCancellationRequested: false },
+    );
+    expect(second.suggestions.length).toBeGreaterThan(0);
+    resolve(null);
+    expect((await first).suggestions).toEqual([]);
+  });
   it("registers one provider", () => {
     const { monaco, registered } = fakeMonaco();
     registerCompletion(monaco);

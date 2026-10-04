@@ -1,25 +1,42 @@
 import { Loader2, X, XCircle } from "lucide-react";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState } from "react";
 import { hasGeometryColumn } from "@/lib/geometry";
 import { cancelTabQuery, executeTabQuery } from "@/lib/query-execution";
 import { cellText } from "@/lib/wire";
 import { useActiveTab } from "@/stores/tab-store";
 import { useUIStore } from "@/stores/ui-store";
-import { ExplainPanel } from "../explain-panel";
-import { QueryHistory } from "../query-history";
 import { ResultsGrid } from "../results-grid";
-import { ResultsMap } from "../results-map";
 import { ResultsRecord } from "../results-record";
-import { DiffView } from "./diff-view";
 import { EmptyResults, QueryFeedback } from "./feedback";
 import { ResultsToolbar } from "./toolbar";
 import type { PanelView } from "./types";
 import { useEditMode } from "./use-edit-mode";
 import { useVirtualPaging } from "./use-virtual-paging";
 
+const ExplainPanel = lazy(() =>
+  import("../explain-panel").then((module) => ({ default: module.ExplainPanel })),
+);
+const QueryHistory = lazy(() =>
+  import("../query-history").then((module) => ({ default: module.QueryHistory })),
+);
+const ResultsMap = lazy(() =>
+  import("../results-map").then((module) => ({ default: module.ResultsMap })),
+);
+const DiffView = lazy(() => import("./diff-view").then((module) => ({ default: module.DiffView })));
+
 export function ResultsPanel() {
   const activeTab = useActiveTab();
-  return <ResultsPanelContent key={activeTab?.id ?? "empty"} />;
+  return (
+    <Suspense
+      fallback={
+        <div role="status" className="p-4 text-sm text-muted-foreground">
+          Loading view…
+        </div>
+      }
+    >
+      <ResultsPanelContent key={activeTab?.id ?? "empty"} />
+    </Suspense>
+  );
 }
 
 function ResultsPanelContent() {
