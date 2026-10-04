@@ -1,12 +1,12 @@
 #!/usr/bin/env node
+
 /**
- * The release version lives in three files that must agree; the git history
- * shows them drifting apart more than once. Run this in CI and as the first
- * step of a release.
+ * Manifests and the Rust lockfile must agree with the release tag and commit.
  *
- * With --set <version> it writes that version to all three instead of checking.
+ * With --set <version> it aligns those files instead of checking.
  */
 
+import { execFileSync } from "node:child_process";
 import { readFileSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -28,6 +28,12 @@ const sources = [
     path: "src-tauri/Cargo.toml",
     read: (text) => text.match(/^version\s*=\s*"([^"]+)"/m)?.[1],
     write: (text, version) => text.replace(/^(version\s*=\s*)"[^"]*"/m, `$1"${version}"`),
+  },
+  {
+    path: "src-tauri/Cargo.lock",
+    read: (text) => text.match(/\[\[package\]\]\r?\nname = "rsql"\r?\nversion = "([^"]+)"/)?.[1],
+    write: (text, version) =>
+      text.replace(/(\[\[package\]\]\r?\nname = "rsql"\r?\nversion = )"[^"]+"/, `$1"${version}"`),
   },
 ];
 
@@ -67,4 +73,18 @@ if (distinct.length > 1) {
   process.exit(1);
 }
 
-console.log(`Version ${distinct[0]} is consistent across all three files.`);
+const tagIndex = process.argv.indexOf("--tag");
+if (tagIndex !== -1) {
+  const tag = process.argv[tagIndex + 1];
+  if (tag !== `v${distinct[0]}`) {
+    console.error(`Release tag ${tag ?? "(missing)"} does not match v${distinct[0]}.`);
+    process.exit(1);
+  }
+  const revision = (ref) =>
+    execFileSync("git", ["rev-parse", "--verify", ref], { cwd: root, encoding: "utf8" }).trim();
+  if (revision(`refs/tags/${tag}^{commit}`) !== revision("HEAD")) {
+    console.error("Release tag does not point to the checked-out commit.");
+    process.exit(1);
+  }
+}
+console.log(`Version ${distinct[0]} is consistent across manifests and the Rust lockfile.`);

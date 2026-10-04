@@ -11,7 +11,39 @@ on:
         type: string
 
 jobs:
+  verify-version:
+    runs-on: ubuntu-latest
+    outputs:
+      revision: ${{ steps.revision.outputs.sha }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - name: Verify tag and version
+        env:
+          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+        run: node scripts/check-version.mjs --tag "$RELEASE_TAG"
+      - id: revision
+        run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+  frontend:
+    needs: verify-version
+    uses: ./.github/workflows/frontend.yml
+    with:
+      revision: ${{ needs.verify-version.outputs.revision }}
+
+  rust:
+    needs: verify-version
+    uses: ./.github/workflows/rust.yml
+    with:
+      revision: ${{ needs.verify-version.outputs.revision }}
+
   release:
+    needs: [verify-version, frontend, rust]
     permissions:
       contents: write
     strategy:
@@ -33,14 +65,18 @@ jobs:
       # than the ~2 GB a runner defaults to, and the failure is an out-of-memory
       # crash rather than anything that names itself.
       NODE_OPTIONS: --max-old-space-size=4096
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ needs.verify-version.outputs.revision }}
+          fetch-depth: 0
 
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: lts/*
+          node-version-file: .node-version
 
       - name: Install Rust targets
         if: matrix.platform == 'macos-latest'
@@ -66,27 +102,14 @@ jobs:
         run: yarn install --frozen-lockfile
 
       - name: Version consistency
-        run: node scripts/check-version.mjs
+        shell: bash
+        run: node scripts/check-version.mjs --tag "$RELEASE_TAG"
 
       - name: Resolve release tag
         id: release_meta
         shell: bash
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            tag="${{ inputs.tag }}"
-          else
-            tag="${{ github.ref_name }}"
-          fi
-
-          case "$tag" in
-            v*) ;;
-            *)
-              echo "Release tag must start with v, got: $tag"
-              exit 1
-              ;;
-          esac
-
-          echo "tag=$tag" >> "$GITHUB_OUTPUT"
+          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
 
       - name: Validate updater signing secrets
         shell: bash
@@ -204,5 +227,5 @@ jobs:
           releaseBody: "See the assets to download and install this version."
           releaseDraft: true
           prerelease: ${{ contains(steps.release_meta.outputs.tag, '-rc') }}
-          args: ${{ matrix.args }}
+          args: ${{ matrix.args }} -- --locked
           tauriScript: npx tauri

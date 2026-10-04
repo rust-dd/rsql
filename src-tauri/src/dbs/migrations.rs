@@ -1,5 +1,9 @@
 use libsql::{Connection, TransactionBehavior};
 
+#[cfg(test)]
+#[path = "migrations_benchmark.rs"]
+mod benchmark;
+
 /// Remove unreachable legacy result snapshots and reclaim their disk space once.
 pub(crate) async fn cleanup_legacy_snapshots(conn: &Connection) -> libsql::Result<bool> {
     let has_snapshots = {

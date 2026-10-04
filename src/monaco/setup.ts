@@ -1,16 +1,13 @@
-// monaco-editor is pinned to 0.55.0 on purpose. 0.56 narrowed its `exports`
-// map to `"./*": "./esm/vs/*.js"`, and monaco-sql-languages' own worker still
-// imports `monaco-editor/esm/vs/editor/editor.worker.js`, which no longer
-// resolves — the build fails inside that package. Bumping monaco-editor
-// requires monaco-sql-languages to fix its import first.
+// SQL languages uses the moduleId/createData worker API removed in Monaco 0.55.
+// Keep its tested editor version until a paired diagnostics-worker check passes.
 import { loader } from "@monaco-editor/react";
 import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import pgWorker from "monaco-sql-languages/esm/languages/pgsql/pgsql.worker?worker";
 
 import "monaco-sql-languages/esm/languages/pgsql/pgsql.contribution";
-import { LanguageIdEnum } from "monaco-sql-languages/esm/common/constants";
-import { setupLanguageFeatures } from "monaco-sql-languages/esm/setupLanguageFeatures";
+import { LanguageIdEnum } from "monaco-sql-languages/esm/common/constants.js";
+import { setupLanguageFeatures } from "monaco-sql-languages/esm/setupLanguageFeatures.js";
 import { registerCompletion } from "./completion/provider";
 import { registerTheme } from "./theme";
 

@@ -1,0 +1,40 @@
+name: Dependency advisories
+on:
+  schedule:
+    - cron: "27 7 * * 1"
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - "**/Cargo.lock"
+      - "**/yarn.lock"
+      - "src-tauri/deny.toml"
+
+permissions:
+  contents: read
+
+jobs:
+  javascript:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        directory: [".", website]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .node-version
+      - run: yarn install --frozen-lockfile
+        working-directory: ${{ matrix.directory }}
+      - run: node scripts/audit-dependencies.mjs "${{ matrix.directory }}"
+  rust:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: EmbarkStudios/cargo-deny-action@v2
+        with:
+          manifest-path: src-tauri/Cargo.toml
+          rust-version: "1.95.0"
+          arguments: --locked
+          command: check advisories
+          command-arguments: --config src-tauri/deny.toml

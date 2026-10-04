@@ -1,7 +1,7 @@
 {
   "name": "rsql",
   "private": true,
-  "version": "1.2.0",
+  "version": "1.3.0",
   "license": "MIT",
   "type": "module",
   "scripts": {
@@ -14,7 +14,7 @@
     "check": "biome check --write .",
     "check:ci": "biome check .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
+    "test": "vitest run && node --test scripts/*.check.mjs",
     "test:watch": "vitest"
   },
   "dependencies": {
@@ -32,15 +32,16 @@
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "cmdk": "^1.1.1",
+    "dt-sql-parser": "4.5.1",
     "immer": "^11.1.4",
     "leaflet": "^1.9.4",
-    "lodash": "^4.17.23",
+    "lodash": "^4.18.0",
     "lucide-react": "^0.454.0",
-    "marked": "^17.0.4",
-    "monaco-editor": "0.55.0",
-    "monaco-sql-languages": "^1.2.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
+    "marked": "^4.3.0",
+    "monaco-editor": "0.54.0",
+    "monaco-sql-languages": "^1.2.1",
+    "react": "~19.1.9",
+    "react-dom": "~19.1.9",
     "react-responsive-carousel": "^3.2.23",
     "sonner": "^2.0.7",
     "sql-formatter": "^15.7.2",
@@ -58,7 +59,11 @@
     "tailwindcss": "^4.1.13",
     "tw-animate-css": "^1.3.3",
     "typescript": "~5.8.3",
-    "vite": "^7.0.4",
-    "vitest": "^3.2.4"
+    "vite": "^7.3.6",
+    "vitest": "^4.1.11"
+  },
+  "resolutions": {
+    "dompurify": "^3.4.16",
+    "vite": "7.3.6"
   }
 }

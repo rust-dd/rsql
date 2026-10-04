@@ -9,3 +9,6 @@ pub use virtual_cache::*;
 
 #[cfg(test)]
 mod tests;
+
+#[cfg(test)]
+mod benchmark;

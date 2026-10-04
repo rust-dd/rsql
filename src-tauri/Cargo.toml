@@ -1,6 +1,6 @@
 [package]
 name = "rsql"
-version = "1.2.0"
+version = "1.3.0"
 description = "Modern SQL Client"
 authors = ["rust-dd"]
 edition = "2024"

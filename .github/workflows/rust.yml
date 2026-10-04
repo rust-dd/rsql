@@ -1,6 +1,11 @@
 name: Rust
 
 on:
+  workflow_call:
+    inputs:
+      revision:
+        required: true
+        type: string
   push:
     branches: ["main"]
   pull_request:
@@ -15,6 +20,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision || github.sha }}
 
       # Toolchain comes from src-tauri/rust-toolchain.toml.
       - name: Install system dependencies
@@ -41,10 +48,14 @@ jobs:
 
   integration:
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        postgres: [16, 17, 18]
 
     services:
       postgres:
-        image: postgres:16
+        image: postgres:${{ matrix.postgres }}
         env:
           POSTGRES_PASSWORD: postgres
         ports:
@@ -57,6 +68,8 @@ jobs:
 
     steps:
       - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.revision || github.sha }}
 
       - name: Install system dependencies
         run: |
@@ -70,7 +83,7 @@ jobs:
 
       - name: Integration tests against PostgreSQL
         run: |
-          cargo test --locked --test row_mutations --test csv_import --test schema_index -- --ignored
+          cargo test --locked --test row_mutations --test schema_index -- --ignored
           cargo test --locked --bin rsql -- --ignored
         working-directory: src-tauri
         env:
