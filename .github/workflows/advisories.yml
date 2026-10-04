@@ -36,5 +36,5 @@ jobs:
           manifest-path: src-tauri/Cargo.toml
           rust-version: "1.95.0"
           arguments: --locked
-          command: check advisories
-          command-arguments: --config src-tauri/deny.toml
+          command: check
+          command-arguments: --config src-tauri/deny.toml advisories
