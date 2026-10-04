@@ -21,7 +21,7 @@
     "@glideapps/glide-data-grid": "^6.0.3",
     "@monaco-editor/react": "^4.6.0",
     "@radix-ui/react-dialog": "^1.1.4",
-    "@radix-ui/react-label": "^2.1.1",
+    "@radix-ui/react-label": "^2.1.15",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-dialog": "^2.8.1",
     "@tauri-apps/plugin-fs": "^2.6.0",
