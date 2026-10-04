@@ -52,7 +52,7 @@
     "@biomejs/biome": "2.4.15",
     "@tailwindcss/vite": "^4.1.13",
     "@tauri-apps/cli": "^2.12.1",
-    "@types/leaflet": "^1.9.21",
+    "@types/leaflet": "^1.9.22",
     "@types/react": "^19.1.8",
     "@types/react-dom": "^19.1.6",
     "@vitejs/plugin-react": "^4.6.0",
