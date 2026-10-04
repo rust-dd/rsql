@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import fixtures from "../../tests/fixtures/query-wire.json";
 import {
   CELL_SEP,
   type CellValue,
@@ -45,6 +46,11 @@ describe("decodeCell", () => {
 });
 
 describe("decodePage", () => {
+  it.each(fixtures)("matches the shared wire fixture: $name", ({ rows, packed }) => {
+    expect(encodeRows(rows)).toBe(packed);
+    expect(decodePage(packed)).toEqual(rows);
+  });
+
   it("returns no rows for an empty payload", () => {
     expect(decodePage("")).toEqual([]);
   });
@@ -103,6 +109,11 @@ describe("decodeResult", () => {
 });
 
 describe("encodeResult", () => {
+  it("preserves a single empty cell in a complete result", () => {
+    const result = { columns: ["value"], rows: [[""]] };
+    expect(decodeResult(encodeResult(result.columns, result.rows))).toEqual(result);
+  });
+
   it("round-trips through decodeResult", () => {
     const columns = ["id", "name"];
     const rows: CellValue[][] = [

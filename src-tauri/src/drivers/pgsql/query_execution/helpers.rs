@@ -1,50 +1,39 @@
-use tokio_postgres::SimpleQueryMessage;
+use tokio_postgres::{SimpleColumn, SimpleQueryMessage};
 
 use super::super::wire::Cell;
 
-/// Process simple_query messages, returning the last result set that had rows.
-/// If no result set had rows but commands ran, returns synthetic "N rows affected".
-/// If nothing at all, returns empty vecs.
+/// Return the last rowset, preserving its columns even when it has no rows.
+/// Scripts without rowsets return an affected-row message when the count is positive.
 pub(crate) fn process_simple_messages(
     messages: Vec<SimpleQueryMessage>,
 ) -> (Vec<String>, Vec<Vec<Cell>>) {
-    let mut cur_columns: Vec<String> = Vec::new();
-    let mut cur_rows: Vec<Vec<Cell>> = Vec::new();
-    let mut last_columns: Vec<String> = Vec::new();
-    let mut last_rows: Vec<Vec<Cell>> = Vec::new();
-    let mut has_row_result = false;
-    let mut total_affected: u64 = 0;
+    let mut current = None::<(Vec<String>, Vec<Vec<Cell>>)>;
+    let mut last = None;
+    let mut total_affected = 0u64;
 
     for msg in messages {
         match msg {
+            SimpleQueryMessage::RowDescription(columns) => {
+                current = Some((column_names(&columns), Vec::new()));
+            }
             SimpleQueryMessage::Row(row) => {
-                if cur_columns.is_empty() {
-                    cur_columns = column_names(&row);
-                }
-                cur_rows.push(row_cells(&row));
+                let (_, rows) =
+                    current.get_or_insert_with(|| (column_names(row.columns()), Vec::new()));
+                rows.push(row_cells(&row));
             }
             SimpleQueryMessage::CommandComplete(n) => {
-                if !cur_rows.is_empty() {
-                    last_columns = std::mem::take(&mut cur_columns);
-                    last_rows = std::mem::take(&mut cur_rows);
-                    has_row_result = true;
+                if let Some(result) = current.take() {
+                    last = Some(result);
                 } else {
-                    cur_columns.clear();
-                    cur_rows.clear();
+                    total_affected += n;
                 }
-                total_affected += n;
             }
             _ => {}
         }
     }
 
-    // Handle trailing rows (shouldn't happen but be safe)
-    if !cur_rows.is_empty() {
-        return (cur_columns, cur_rows);
-    }
-
-    if has_row_result {
-        (last_columns, last_rows)
+    if let Some(result) = current.or(last) {
+        result
     } else if total_affected > 0 {
         (
             vec!["Result".into()],
@@ -55,9 +44,9 @@ pub(crate) fn process_simple_messages(
     }
 }
 
-/// Column names of a simple-query row, in result order.
-pub(crate) fn column_names(row: &tokio_postgres::SimpleQueryRow) -> Vec<String> {
-    row.columns().iter().map(|c| c.name().to_owned()).collect()
+/// Column names from a simple-query result description, in result order.
+pub(crate) fn column_names(columns: &[SimpleColumn]) -> Vec<String> {
+    columns.iter().map(|c| c.name().to_owned()).collect()
 }
 
 /// Cell values of a simple-query row. `None` is SQL NULL.

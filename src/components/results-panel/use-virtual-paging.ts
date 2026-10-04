@@ -1,14 +1,13 @@
 import { useCallback, useEffect, useRef } from "react";
 import { DriverFactory } from "@/lib/database-driver";
 import * as virtualCache from "@/lib/virtual-cache";
+import { decodePage } from "@/lib/wire";
 import { useProjectStore } from "@/stores/project-store";
 import { useTabStore } from "@/stores/tab-store";
 import {
   CACHE_WINDOW_PAGES,
-  CELL_SEP,
   MAX_CONCURRENT_PAGE_FETCHES,
   MAX_QUEUED_PAGE_FETCHES,
-  ROW_SEP,
 } from "./constants";
 
 interface VirtualQuery {
@@ -72,7 +71,7 @@ export function useVirtualPaging({ vq, projectId }: UseVirtualPagingArgs) {
       const selectedTab = useTabStore.getState().tabs[selectedIdx];
       if (selectedTab?.virtualQuery?.queryId !== vq.queryId) return;
 
-      const rows = packed ? packed.split(ROW_SEP).map((r) => r.split(CELL_SEP)) : [];
+      const rows = decodePage(packed);
       const expectedRows = Math.max(0, Math.min(vq.pageSize, vq.totalRows - offset));
       if (expectedRows > 0 && rows.length === 0) {
         // Keep page as "missing" so viewport observer can retry instead of caching a permanent empty page.

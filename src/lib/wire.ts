@@ -5,7 +5,8 @@
  * Cells are joined by CELL_SEP, rows by ROW_SEP. Because any byte can appear in
  * a Postgres text value, separators occurring inside data are escaped with ESC
  * rather than replaced. SQL NULL has its own encoding so it stays distinct from
- * the text value "null" and from the empty string.
+ * the text value "null" and from the empty string. Empty strings have their
+ * own marker so a single empty cell cannot be mistaken for an empty page.
  */
 
 export const CELL_SEP = "\x1F";
@@ -13,6 +14,7 @@ export const ROW_SEP = "\x1E";
 export const ESC = "\x1D";
 
 const NULL_MARKER = `${ESC}N`;
+const EMPTY_MARKER = `${ESC}E`;
 const TAG_CELL_SEP = "A";
 const TAG_ROW_SEP = "B";
 const TAG_ESC = "C";
@@ -27,6 +29,7 @@ export type CellValue = string | null;
  */
 export function encodeCell(cell: CellValue): string {
   if (cell === null) return NULL_MARKER;
+  if (cell === "") return EMPTY_MARKER;
   if (!cell.includes(CELL_SEP) && !cell.includes(ROW_SEP) && !cell.includes(ESC)) {
     return cell;
   }
@@ -61,6 +64,7 @@ export function encodeResult(columns: string[], rows: CellValue[][]): string {
 /** Decode one cell, resolving the NULL marker and unescaping separators. */
 export function decodeCell(raw: string): CellValue {
   if (raw === NULL_MARKER) return null;
+  if (raw === EMPTY_MARKER) return "";
   if (!raw.includes(ESC)) return raw;
 
   let out = "";

@@ -3,7 +3,7 @@ use tauri::Manager;
 use tauri::menu::{AboutMetadata, MenuBuilder, SubmenuBuilder};
 use tokio::sync::Mutex;
 
-use crate::{AppState, LOCAL_DB_NAME, terminal, utils};
+use crate::{AppState, LOCAL_DB_NAME, dbs::migrations, terminal, utils};
 
 pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(desktop)]
@@ -72,20 +72,8 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
         .await
         .expect("Failed to create workspaces table");
 
-        // Virtual query results were mirrored into these tables one page at a
-        // time as the user scrolled, but nothing could ever read them back: the
-        // frontend does not persist the query id a page belongs to, so after a
-        // restart every row was unreachable. Drop them and reclaim the space.
-        let dropped_snapshots = conn
-            .execute("DROP TABLE IF EXISTS virtual_query_pages", ())
-            .await
-            .is_ok()
-            & conn
-                .execute("DROP TABLE IF EXISTS virtual_query_snapshots", ())
-                .await
-                .is_ok();
-        if dropped_snapshots {
-            conn.execute("VACUUM", ()).await.ok();
+        if let Err(error) = migrations::cleanup_legacy_snapshots(&conn).await {
+            tracing::warn!(%error, "Legacy result snapshot cleanup failed");
         }
 
         for col in [

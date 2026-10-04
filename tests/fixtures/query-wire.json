@@ -1,0 +1,19 @@
+[
+  { "name": "no rows", "rows": [], "packed": "" },
+  { "name": "one empty cell", "rows": [[""]], "packed": "\u001dE" },
+  {
+    "name": "empty single-column rows",
+    "rows": [[""], [""], [""]],
+    "packed": "\u001dE\u001e\u001dE\u001e\u001dE"
+  },
+  {
+    "name": "NULL and marker text",
+    "rows": [[null, "null", "", "\u001dN", "\u001dE"]],
+    "packed": "\u001dN\u001fnull\u001f\u001dE\u001f\u001dCN\u001f\u001dCE"
+  },
+  {
+    "name": "Unicode and control characters",
+    "rows": [["árvíztűrő 🦀\u001d\u001e\u001f"], ["日本語"]],
+    "packed": "árvíztűrő 🦀\u001dC\u001dB\u001dA\u001e日本語"
+  }
+]

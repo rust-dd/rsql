@@ -31,7 +31,7 @@ struct PageAccumulator {
 impl PageAccumulator {
     fn push(&mut self, row: &tokio_postgres::SimpleQueryRow, page_size: usize) {
         if self.columns.is_empty() {
-            self.columns = column_names(row);
+            self.columns = column_names(row.columns());
         }
         if self.rows_in_page == page_size {
             self.packed_bytes += self.current.len();
@@ -59,15 +59,15 @@ impl PageAccumulator {
         self
     }
 
-    fn is_empty(&self) -> bool {
-        self.total_rows == 0
+    fn has_rowset(&self) -> bool {
+        !self.columns.is_empty()
     }
 }
 
 /// Execute a query and pre-pack its rows into page-sized strings held in memory.
 /// Returns (columns_packed, total_rows, first_page_packed, elapsed_ms, capped).
-/// A non-SELECT or empty result returns empty columns_packed, with a synthetic
-/// affected-rows message in first_page_packed when applicable.
+/// Empty rowsets keep their column header. Scripts without rowsets return an empty
+/// header and a synthetic affected-row message in first_page_packed when applicable.
 pub async fn execute_virtual(
     client: &Client,
     cache: &tokio::sync::Mutex<VirtualCache>,
@@ -81,12 +81,15 @@ pub async fn execute_virtual(
     pin_mut!(stream);
 
     let mut accum = PageAccumulator::default();
-    let mut last: Option<PageAccumulator> = None;
-    let mut total_affected: u64 = 0;
+    let mut last = None;
+    let mut total_affected = 0u64;
     let mut capped = false;
 
     while let Some(message) = stream.try_next().await.map_err(query_failed)? {
         match message {
+            SimpleQueryMessage::RowDescription(columns) => {
+                accum.columns = column_names(&columns);
+            }
             SimpleQueryMessage::Row(row) => {
                 accum.push(&row, page_size);
                 if accum.at_limit() {
@@ -94,13 +97,11 @@ pub async fn execute_virtual(
                     break;
                 }
             }
-            // Multi-statement scripts report the last statement that had rows,
-            // matching what the non-virtual paths do.
             SimpleQueryMessage::CommandComplete(n) => {
-                total_affected += n;
-                if !accum.is_empty() {
+                if accum.has_rowset() {
                     last = Some(std::mem::take(&mut accum).finish());
                 } else {
+                    total_affected += n;
                     accum = PageAccumulator::default();
                 }
             }
@@ -108,10 +109,10 @@ pub async fn execute_virtual(
         }
     }
 
-    let result = if accum.is_empty() {
-        last.unwrap_or_default()
-    } else {
+    let result = if accum.has_rowset() {
         accum.finish()
+    } else {
+        last.unwrap_or_default()
     };
 
     let elapsed = start.elapsed().as_millis() as f32;
@@ -151,7 +152,7 @@ pub async fn execute_virtual(
     ))
 }
 
-/// Fetch a pre-packed page from the in-memory cache. O(1) — no packing at serve time.
+/// Fetch a cached page without repacking its rows.
 pub async fn fetch_virtual_page(
     cache: &tokio::sync::Mutex<VirtualCache>,
     query_id: &str,
@@ -168,7 +169,7 @@ pub async fn fetch_virtual_page(
     Ok(entry.pages.get(page_index).cloned().unwrap_or_default())
 }
 
-/// Remove a query from the in-memory cache. Large page strings are freed → OS reclaims RSS.
+/// Remove a query and release its cached pages.
 pub async fn close_virtual(
     cache: &tokio::sync::Mutex<VirtualCache>,
     query_id: &str,
@@ -197,7 +198,10 @@ mod tests {
             if accum.rows_in_page > 0 {
                 accum.current.push(ROW_SEP);
             }
-            let cells: Vec<Option<String>> = row.iter().map(|c| c.map(str::to_string)).collect();
+            let cells = row
+                .iter()
+                .map(|c| c.map(str::to_string))
+                .collect::<Vec<_>>();
             push_row(&mut accum.current, &cells);
             accum.rows_in_page += 1;
             accum.total_rows += 1;
@@ -207,7 +211,7 @@ mod tests {
 
     #[test]
     fn rows_are_split_into_pages_of_the_requested_size() {
-        let rows: Vec<Vec<Option<&str>>> = (0..5).map(|_| vec![Some("x")]).collect();
+        let rows = (0..5).map(|_| vec![Some("x")]).collect::<Vec<_>>();
         let accum = accumulate(&rows, 2);
         assert_eq!(accum.pages.len(), 3);
         assert_eq!(accum.total_rows, 5);
@@ -215,7 +219,7 @@ mod tests {
 
     #[test]
     fn a_partial_final_page_is_kept() {
-        let rows: Vec<Vec<Option<&str>>> = (0..3).map(|_| vec![Some("x")]).collect();
+        let rows = (0..3).map(|_| vec![Some("x")]).collect::<Vec<_>>();
         let accum = accumulate(&rows, 2);
         assert_eq!(accum.pages.len(), 2);
         assert_eq!(accum.pages[1].split(ROW_SEP).count(), 1);
@@ -223,7 +227,7 @@ mod tests {
 
     #[test]
     fn an_exactly_full_page_produces_no_trailing_empty_page() {
-        let rows: Vec<Vec<Option<&str>>> = (0..4).map(|_| vec![Some("x")]).collect();
+        let rows = (0..4).map(|_| vec![Some("x")]).collect::<Vec<_>>();
         let accum = accumulate(&rows, 2);
         assert_eq!(accum.pages.len(), 2);
     }
@@ -245,7 +249,7 @@ mod tests {
     }
 
     #[test]
-    fn an_empty_accumulator_reports_empty() {
-        assert!(PageAccumulator::default().is_empty());
+    fn an_empty_accumulator_has_no_rowset() {
+        assert!(!PageAccumulator::default().has_rowset());
     }
 }

@@ -5,7 +5,8 @@
 //! inside data are escaped with [`ESC`] rather than replaced — replacing them
 //! silently corrupted values, which broke primary-key matching on row updates.
 //! SQL NULL has its own encoding so it stays distinguishable from the text
-//! value `"null"` and from the empty string.
+//! value `"null"` and from the empty string. Empty strings have a marker so a
+//! single empty cell cannot be mistaken for an empty page.
 
 /// Cell separator (Unit Separator, ASCII 0x1F).
 pub(crate) const CELL_SEP: char = '\x1F';
@@ -15,6 +16,7 @@ pub(crate) const ROW_SEP: char = '\x1E';
 pub(crate) const ESC: char = '\x1D';
 
 const TAG_NULL: char = 'N';
+const TAG_EMPTY: char = 'E';
 const TAG_CELL_SEP: char = 'A';
 const TAG_ROW_SEP: char = 'B';
 const TAG_ESC: char = 'C';
@@ -29,6 +31,12 @@ pub(crate) fn push_cell(out: &mut String, cell: Option<&str>) {
         out.push(TAG_NULL);
         return;
     };
+
+    if value.is_empty() {
+        out.push(ESC);
+        out.push(TAG_EMPTY);
+        return;
+    }
 
     // Separators are ASCII, so a byte scan cannot produce false hits inside
     // multi-byte characters and lets the common case skip the escape pass.
@@ -65,12 +73,15 @@ pub(crate) fn push_row(out: &mut String, row: &[Cell]) {
     }
 }
 
-/// Exact byte budget for [`pack_rows`], ignoring the rare escape expansion.
+/// Capacity estimate for [`pack_rows`] before separator escaping.
 fn packed_capacity(rows: &[Vec<Cell>]) -> usize {
     let mut total = 0;
     for row in rows {
         for cell in row {
-            total += cell.as_ref().map_or(2, String::len);
+            total += cell.as_ref().map_or(2, |value| match value.len() {
+                0 => 2,
+                length => length,
+            });
         }
         total += row.len();
     }
@@ -110,10 +121,31 @@ pub(crate) fn pack_columns(columns: &[String]) -> String {
 mod tests {
     use super::*;
 
+    #[derive(serde::Deserialize)]
+    struct Fixture {
+        name: String,
+        rows: Vec<Vec<Cell>>,
+        packed: String,
+    }
+
+    #[test]
+    fn matches_shared_wire_fixtures() {
+        let fixtures = serde_json::from_str::<Vec<Fixture>>(include_str!(
+            "../../../../tests/fixtures/query-wire.json"
+        ))
+        .unwrap();
+        for fixture in fixtures {
+            assert_eq!(pack_rows(&fixture.rows), fixture.packed, "{}", fixture.name);
+        }
+    }
+
     /// Mirror of the TypeScript decoder, so round-trips can be asserted here.
     fn unpack_cell(raw: &str) -> Cell {
         if raw == "\x1DN" {
             return None;
+        }
+        if raw == "\x1DE" {
+            return Some(String::new());
         }
         if !raw.contains(ESC) {
             return Some(raw.to_owned());
@@ -226,7 +258,7 @@ mod tests {
     fn column_names_are_escaped_too() {
         let columns = vec!["id".to_string(), "we\x1Fird".to_string()];
         let packed = pack_columns(&columns);
-        let decoded: Vec<Cell> = packed.split(CELL_SEP).map(unpack_cell).collect();
+        let decoded = packed.split(CELL_SEP).map(unpack_cell).collect::<Vec<_>>();
         assert_eq!(decoded[0].as_deref(), Some("id"));
         assert_eq!(decoded[1].as_deref(), Some("we\x1Fird"));
     }

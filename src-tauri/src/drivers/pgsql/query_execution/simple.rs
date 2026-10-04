@@ -9,7 +9,7 @@ use super::helpers::process_simple_messages;
 
 /// Execute a timed query and return (columns, rows, elapsed_ms).
 /// Uses simple_query protocol — PG returns all values as text, no type conversion needed.
-/// Supports multi-statement: returns the last result set that had rows.
+/// Supports multi-statement scripts, returning the last rowset including empty ones.
 pub async fn execute_query(
     client: &Client,
     sql: &str,
@@ -37,7 +37,7 @@ pub async fn execute_query_packed(client: &Client, sql: &str) -> Result<(String,
     let header = pack_columns(&columns);
     let body = pack_rows(&rows);
 
-    let packed = if body.is_empty() {
+    let packed = if rows.is_empty() {
         header
     } else {
         let mut s = String::with_capacity(header.len() + 1 + body.len());

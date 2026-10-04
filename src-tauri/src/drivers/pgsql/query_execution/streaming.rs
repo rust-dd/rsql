@@ -1,10 +1,10 @@
 use std::time::Instant;
-use tokio_postgres::{Client, SimpleQueryMessage};
+use tokio_postgres::Client;
 
 use crate::common::enums::{AppError, query_failed};
 
-use super::super::wire::{Cell, pack_columns, pack_rows};
-use super::helpers::{column_names, process_simple_messages, row_cells};
+use super::super::wire::{pack_columns, pack_rows};
+use super::helpers::process_simple_messages;
 
 /// Events emitted during streamed query execution.
 #[derive(serde::Serialize, Clone)]
@@ -36,15 +36,13 @@ pub async fn execute_query_streamed(
     let start = Instant::now();
     let event_name = format!("query-stream-{}", stream_id);
 
-    // Begin transaction + declare cursor for memory-efficient streaming
     client.batch_execute("BEGIN").await.map_err(query_failed)?;
 
     let cursor_sql = format!("DECLARE _rsql_cur NO SCROLL CURSOR FOR {}", sql);
     match client.batch_execute(&cursor_sql).await {
         Ok(_) => {
-            // Cursor-based fetch loop using simple_query for zero type conversion
             let fetch_sql = format!("FETCH {} FROM _rsql_cur", CURSOR_FETCH_SIZE);
-            let mut total_sent: usize = 0;
+            let mut total_sent = 0usize;
             let mut columns_sent = false;
             let mut capped = false;
 
@@ -57,24 +55,10 @@ pub async fn execute_query_streamed(
                     }
                 };
 
-                let mut batch_rows: Vec<Vec<Cell>> = Vec::new();
-                let mut batch_columns: Option<Vec<String>> = None;
+                let (batch_columns, batch_rows) = process_simple_messages(messages);
 
-                for msg in messages {
-                    if let SimpleQueryMessage::Row(row) = msg {
-                        if batch_columns.is_none() {
-                            batch_columns = Some(column_names(&row));
-                        }
-                        batch_rows.push(row_cells(&row));
-                    }
-                }
-
-                if batch_rows.is_empty() {
-                    break;
-                }
-
-                if !columns_sent && let Some(cols) = batch_columns {
-                    let header = pack_columns(&cols);
+                if !columns_sent {
+                    let header = pack_columns(&batch_columns);
                     let _ = app.emit(
                         &event_name,
                         QueryStreamEvent::Columns {
@@ -83,6 +67,10 @@ pub async fn execute_query_streamed(
                         },
                     );
                     columns_sent = true;
+                }
+
+                if batch_rows.is_empty() {
+                    break;
                 }
 
                 let packed = pack_rows(&batch_rows);
@@ -112,10 +100,8 @@ pub async fn execute_query_streamed(
             let _ = app.emit(&event_name, QueryStreamEvent::Done { elapsed, capped });
         }
         Err(_cursor_err) => {
-            // DECLARE CURSOR failed (non-SELECT query like INSERT/UPDATE/DDL)
             client.batch_execute("ROLLBACK").await.ok();
 
-            // Re-execute with simple_query for multi-statement support
             let messages = client.simple_query(sql).await.map_err(query_failed)?;
 
             let (columns, rows) = process_simple_messages(messages);

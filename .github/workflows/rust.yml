@@ -32,11 +32,11 @@ jobs:
         working-directory: src-tauri
 
       - name: Clippy
-        run: cargo clippy --all-targets -- -D warnings
+        run: cargo clippy --locked --all-targets -- -D warnings
         working-directory: src-tauri
 
       - name: Test
-        run: cargo test
+        run: cargo test --locked
         working-directory: src-tauri
 
   integration:
@@ -68,8 +68,10 @@ jobs:
         with:
           workspaces: "./src-tauri -> target"
 
-      - name: Row mutation tests against PostgreSQL
-        run: cargo test --test row_mutations -- --ignored
+      - name: Integration tests against PostgreSQL
+        run: |
+          cargo test --locked --test row_mutations --test csv_import --test schema_index -- --ignored
+          cargo test --locked --bin rsql drivers::pgsql::query_execution::tests -- --ignored
         working-directory: src-tauri
         env:
           RSQL_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
