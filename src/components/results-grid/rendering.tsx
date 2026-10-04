@@ -51,7 +51,7 @@ export function computeGridColumns(columns: string[], rows: CellValue[][]): Grid
       if (cellLen > maxLen) maxLen = cellLen;
     }
     const width = Math.max(MIN_COL_WIDTH, Math.min(MAX_COL_WIDTH, maxLen * CHAR_WIDTH + PADDING));
-    return { title: col, id: col, width };
+    return { title: col, id: `${colIdx}:${col}`, width };
   });
 }
 

@@ -5,7 +5,7 @@ import type { CellValue } from "@/lib/wire";
 export type ExportFormat = "csv" | "json" | "sql" | "markdown" | "xml";
 
 function escapeCSVText(value: string): string {
-  if (value.includes(",") || value.includes('"') || value.includes("\n")) {
+  if (value === "" || /[,"\r\n]/.test(value)) {
     return `"${value.replace(/"/g, '""')}"`;
   }
   return value;
@@ -27,11 +27,25 @@ function escapeSQL(cell: CellValue): string {
 
 function escapeXML(cell: CellValue): string {
   if (cell === null) return "";
+  for (const character of cell) {
+    const code = character.codePointAt(0) ?? 0;
+    if (
+      (code < 32 && code !== 9 && code !== 10 && code !== 13) ||
+      (code >= 0xd800 && code <= 0xdfff) ||
+      code === 0xfffe ||
+      code === 0xffff
+    ) {
+      throw new Error(
+        "XML cannot represent some control characters in this result. Use JSON or CSV.",
+      );
+    }
+  }
   return cell
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
-    .replace(/"/g, "&quot;");
+    .replace(/"/g, "&quot;")
+    .replace(/\r/g, "&#13;");
 }
 
 export function toCSV(columns: string[], rows: CellValue[][]): string {
@@ -42,23 +56,23 @@ export function toCSV(columns: string[], rows: CellValue[][]): string {
 
 /** SQL NULL is exported as JSON null rather than the string "null". */
 export function toJSON(columns: string[], rows: CellValue[][]): string {
-  const objects = rows.map((row) => {
-    const obj: Record<string, CellValue> = {};
-    columns.forEach((col, i) => {
-      obj[col] = row[i] ?? null;
-    });
-    return obj;
-  });
+  if (new Set(columns).size !== columns.length) {
+    throw new Error("JSON export requires unique column names. Add column aliases or use CSV.");
+  }
+  const objects = rows.map((row) =>
+    Object.fromEntries(columns.map((column, i) => [column, row[i] ?? null])),
+  );
   return JSON.stringify(objects, null, 2);
 }
 
 export function toSQL(columns: string[], rows: CellValue[][], tableName = "table_name"): string {
   if (rows.length === 0) return `-- No rows to export`;
-  const colList = columns.map((c) => `"${c}"`).join(", ");
+  const quoteIdentifier = (value: string) => `"${value.replace(/"/g, '""')}"`;
+  const colList = columns.map(quoteIdentifier).join(", ");
   return rows
     .map((row) => {
       const vals = row.map(escapeSQL).join(", ");
-      return `INSERT INTO "${tableName}" (${colList}) VALUES (${vals});`;
+      return `INSERT INTO ${quoteIdentifier(tableName)} (${colList}) VALUES (${vals});`;
     })
     .join("\n");
 }
@@ -77,7 +91,13 @@ export function toXML(columns: string[], rows: CellValue[][]): string {
   for (const row of rows) {
     lines.push("  <row>");
     columns.forEach((col, i) => {
-      lines.push(`    <${col}>${escapeXML(row[i])}</${col}>`);
+      const name = escapeXML(col).replace(/\n/g, "&#10;").replace(/\t/g, "&#9;");
+      const value = row[i] ?? null;
+      lines.push(
+        value === null
+          ? `    <column name="${name}" null="true" />`
+          : `    <column name="${name}">${escapeXML(value)}</column>`,
+      );
     });
     lines.push("  </row>");
   }
@@ -126,9 +146,10 @@ export async function exportResults(
     filters: [{ name: filterNames[format], extensions: [ext] }],
   });
 
-  if (!filePath) return; // user cancelled
+  if (!filePath) return false;
 
   await writeTextFile(filePath, content);
+  return true;
 }
 
 export function copyToClipboard(

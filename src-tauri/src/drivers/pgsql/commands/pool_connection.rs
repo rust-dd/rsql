@@ -11,7 +11,7 @@ use crate::drivers::pgsql::get_pool;
 use native_tls::TlsConnector;
 use postgres_native_tls::MakeTlsConnector;
 use tauri::{AppHandle, Manager, Result};
-use tokio_postgres::{CancelToken, Config, NoTls};
+use tokio_postgres::{Config, NoTls};
 
 pub(crate) fn full_error_chain(e: &dyn std::error::Error) -> String {
     let mut msg = e.to_string();
@@ -89,35 +89,6 @@ pub(crate) async fn acquire_client(
             e
         ))
     })
-}
-
-pub(crate) async fn apply_statement_timeout(client: &deadpool_postgres::Client, timeout_ms: u32) {
-    if timeout_ms > 0 {
-        client
-            .simple_query(&format!("SET statement_timeout = {}", timeout_ms))
-            .await
-            .ok();
-    }
-}
-
-pub(crate) async fn reset_statement_timeout(client: &deadpool_postgres::Client, timeout_ms: u32) {
-    if timeout_ms > 0 {
-        client.simple_query("RESET statement_timeout").await.ok();
-    }
-}
-
-pub(crate) async fn set_cancel_token(
-    app_state: &AppState,
-    exec_id: &str,
-    project_id: &str,
-    token: CancelToken,
-) {
-    let mut cancel_tokens = app_state.cancel_tokens.lock().await;
-    cancel_tokens.insert(exec_id.to_string(), (project_id.to_string(), token));
-}
-
-pub(crate) async fn clear_cancel_token(app_state: &AppState, exec_id: &str) {
-    app_state.cancel_tokens.lock().await.remove(exec_id);
 }
 
 #[tauri::command(rename_all = "snake_case")]

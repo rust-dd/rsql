@@ -5,16 +5,10 @@ use crate::drivers::pgsql::{
     fetch_virtual_page,
 };
 
-use native_tls::TlsConnector;
-use postgres_native_tls::MakeTlsConnector;
 use tauri::ipc::Response;
 use tauri::{AppHandle, Manager, Result, State};
-use tokio_postgres::NoTls;
 
-use super::pool_connection::{
-    acquire_client, apply_statement_timeout, clear_cancel_token, reset_statement_timeout,
-    set_cancel_token,
-};
+use super::query_session::run_user_query;
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn pgsql_run_query(
@@ -23,49 +17,17 @@ pub async fn pgsql_run_query(
     exec_id: &str,
     app_state: State<'_, AppState>,
 ) -> Result<Response> {
-    let client = acquire_client(&app_state.clients, project_id).await?;
-    set_cancel_token(&app_state, exec_id, project_id, client.cancel_token()).await;
-
-    let result = execute_query(&client, sql).await;
-    clear_cancel_token(&app_state, exec_id).await;
-    let result = result?;
+    let result = run_user_query(&app_state, project_id, exec_id, None, async |client| {
+        execute_query(client, sql).await
+    })
+    .await?;
     let json = sonic_rs::to_string(&result).map_err(|e| AppError::QueryFailed(e.to_string()))?;
     Ok(Response::new(json))
 }
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn pgsql_cancel_query(exec_id: &str, app_state: State<'_, AppState>) -> Result<bool> {
-    let (project_id, cancel_token) = {
-        let cancel_tokens = app_state.cancel_tokens.lock().await;
-        match cancel_tokens.get(exec_id) {
-            Some(entry) => entry.clone(),
-            // The query already finished; nothing to cancel is not an error.
-            None => return Ok(false),
-        }
-    };
-
-    let use_ssl = {
-        let client_ssl = app_state.client_ssl.lock().await;
-        *client_ssl.get(&project_id).unwrap_or(&false)
-    };
-
-    if use_ssl {
-        let tls_connector = TlsConnector::builder()
-            .build()
-            .map_err(|e| AppError::ConnectionFailed(e.to_string()))?;
-        let tls = MakeTlsConnector::new(tls_connector);
-        cancel_token
-            .cancel_query(tls)
-            .await
-            .map_err(|e| AppError::QueryFailed(format!("Failed to cancel query: {e}")))?;
-    } else {
-        cancel_token
-            .cancel_query(NoTls)
-            .await
-            .map_err(|e| AppError::QueryFailed(format!("Failed to cancel query: {e}")))?;
-    }
-
-    Ok(true)
+    Ok(app_state.executions.cancel(exec_id))
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -76,16 +38,14 @@ pub async fn pgsql_run_query_packed(
     timeout_ms: Option<u32>,
     app_state: State<'_, AppState>,
 ) -> Result<Response> {
-    let client = acquire_client(&app_state.clients, project_id).await?;
-    set_cancel_token(&app_state, exec_id, project_id, client.cancel_token()).await;
-
-    let timeout = timeout_ms.unwrap_or(0);
-    apply_statement_timeout(&client, timeout).await;
-    let result = execute_query_packed(&client, sql).await;
-    reset_statement_timeout(&client, timeout).await;
-    clear_cancel_token(&app_state, exec_id).await;
-
-    let result = result?;
+    let result = run_user_query(
+        &app_state,
+        project_id,
+        exec_id,
+        timeout_ms,
+        async |client| execute_query_packed(client, sql).await,
+    )
+    .await?;
     let json = sonic_rs::to_string(&result).map_err(|e| AppError::QueryFailed(e.to_string()))?;
     Ok(Response::new(json))
 }
@@ -99,12 +59,11 @@ pub async fn pgsql_run_query_streamed(
     app: AppHandle,
 ) -> Result<()> {
     let app_state = app.state::<AppState>();
-    let client = acquire_client(&app_state.clients, project_id).await?;
-    set_cancel_token(&app_state, exec_id, project_id, client.cancel_token()).await;
-
-    let result = execute_query_streamed(&client, sql, stream_id, &app).await;
-    clear_cancel_token(&app_state, exec_id).await;
-    result.map_err(Into::into)
+    run_user_query(&app_state, project_id, exec_id, None, async |client| {
+        execute_query_streamed(client, sql, stream_id, &app).await
+    })
+    .await
+    .map_err(Into::into)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -117,16 +76,20 @@ pub async fn pgsql_execute_virtual(
     timeout_ms: Option<u32>,
     app_state: State<'_, AppState>,
 ) -> Result<Response> {
-    let client = acquire_client(&app_state.clients, project_id).await?;
-    set_cancel_token(&app_state, exec_id, project_id, client.cancel_token()).await;
-
-    let timeout = timeout_ms.unwrap_or(0);
-    apply_statement_timeout(&client, timeout).await;
-    let result = execute_virtual(&client, &app_state.virtual_cache, sql, query_id, page_size).await;
-    reset_statement_timeout(&client, timeout).await;
-    clear_cancel_token(&app_state, exec_id).await;
+    let result = run_user_query(
+        &app_state,
+        project_id,
+        exec_id,
+        timeout_ms,
+        async |client| {
+            execute_virtual(client, &app_state.virtual_cache, sql, query_id, page_size).await
+        },
+    )
+    .await;
+    if result.is_err() {
+        close_virtual(&app_state.virtual_cache, query_id).await?;
+    }
     let result = result?;
-
     let json = sonic_rs::to_string(&result).map_err(|e| AppError::QueryFailed(e.to_string()))?;
     Ok(Response::new(json))
 }

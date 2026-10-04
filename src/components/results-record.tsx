@@ -1,6 +1,6 @@
+import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import type { CellValue } from "@/lib/wire";
-import { useUIStore } from "@/stores/ui-store";
 
 interface ResultsRecordProps {
   columns: string[];
@@ -8,18 +8,19 @@ interface ResultsRecordProps {
 }
 
 export function ResultsRecord({ columns, rows }: ResultsRecordProps) {
-  const selectedRow = useUIStore((s) => s.selectedRow);
-  const setSelectedRow = useUIStore((s) => s.setSelectedRow);
+  const [selection, setSelection] = useState({ rows, index: 0 });
+  const selectedRow = selection.rows === rows ? selection.index : 0;
+  const setSelectedRow = (index: number) => setSelection({ rows, index });
 
   if (rows.length === 0) {
     return (
       <div className="flex items-center justify-center p-4 text-muted-foreground">
-        No row selected
+        No rows to display
       </div>
     );
   }
 
-  const safeIndex = Math.min(selectedRow, rows.length - 1);
+  const safeIndex = Math.max(0, Math.min(selectedRow, rows.length - 1));
 
   return (
     <div className="flex-1 overflow-auto p-4">
@@ -28,7 +29,7 @@ export function ResultsRecord({ columns, rows }: ResultsRecordProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setSelectedRow((i) => Math.max(0, i - 1))}
+            onClick={() => setSelectedRow(Math.max(0, safeIndex - 1))}
             disabled={safeIndex === 0}
           >
             Prev
@@ -39,21 +40,32 @@ export function ResultsRecord({ columns, rows }: ResultsRecordProps) {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => setSelectedRow((i) => Math.min(rows.length - 1, i + 1))}
+            onClick={() => setSelectedRow(Math.min(rows.length - 1, safeIndex + 1))}
             disabled={safeIndex >= rows.length - 1}
           >
             Next
           </Button>
         </div>
-        <table className="w-full border-collapse font-mono text-xs">
+        <table className="w-full table-fixed border-collapse font-mono text-xs">
           <tbody>
             {columns.map((col, idx) => (
-              <tr key={col} className={idx % 2 === 1 ? "bg-muted/30" : ""}>
-                <td className="w-1/3 border-b border-border px-3 py-2 font-semibold text-foreground whitespace-nowrap">
+              <tr key={`${idx}:${col}`} className={idx % 2 === 1 ? "bg-muted/30" : ""}>
+                <td className="w-1/3 break-words border-b border-border px-3 py-2 align-top font-semibold text-foreground">
                   {col}
                 </td>
-                <td className="border-b border-border px-3 py-2 text-foreground">
-                  {rows[safeIndex]?.[idx] ?? ""}
+                <td className="whitespace-pre-wrap break-words border-b border-border px-3 py-2 text-foreground">
+                  {rows[safeIndex]?.[idx] === null ? (
+                    <span
+                      className="rounded bg-muted px-1.5 py-0.5 text-muted-foreground"
+                      title="SQL NULL"
+                    >
+                      NULL
+                    </span>
+                  ) : rows[safeIndex]?.[idx] === "" ? (
+                    <span className="italic text-muted-foreground">empty string</span>
+                  ) : (
+                    rows[safeIndex]?.[idx]
+                  )}
                 </td>
               </tr>
             ))}

@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type { EditSession } from "@/lib/mutations";
+import { cancelExecution, releaseTabResources } from "@/lib/tab-resources";
 import type { CellValue } from "@/lib/wire";
 import type { ExplainPlan, QueryResult, Tab, VirtualQuery } from "@/types";
 
@@ -38,7 +39,7 @@ interface TabState {
   toggleSplit: (tabId: string) => void;
   updateSplitContent: (tabId: string, value: string) => void;
   setSplitResult: (tabId: string, result: QueryResult) => void;
-  setSplitExecuting: (tabId: string, executing: boolean) => void;
+  setSplitExecuting: (tabId: string, executing: boolean, execId?: string) => void;
   setQueryTimeout: (tabId: string, timeout: number) => void;
 
   startEditSession: (tabId: string, session: EditSession) => void;
@@ -85,7 +86,7 @@ function makeSingletonTab(
 
 export const useTabStore = create<TabState>()(
   persist(
-    immer((set) => ({
+    immer((set, get) => ({
       tabs: [
         {
           id: genTabId(),
@@ -137,6 +138,9 @@ export const useTabStore = create<TabState>()(
         set(makeSingletonTab("pg-settings", projectId, "PG Settings")),
 
       closeTab: (index) => {
+        const closing = get().tabs[index];
+        if (!closing) return;
+        releaseTabResources(closing.id);
         set((s) => {
           s.tabs.splice(index, 1);
           if (s.tabs.length === 0) {
@@ -151,13 +155,19 @@ export const useTabStore = create<TabState>()(
         });
       },
 
-      closeAllTabs: () =>
+      closeAllTabs: () => {
+        for (const tab of get().tabs) releaseTabResources(tab.id);
         set((s) => {
           s.tabs = [];
           s.selectedTabIndex = -1;
-        }),
+        });
+      },
 
       closeOtherTabs: (index) => {
+        if (!get().tabs[index]) return;
+        for (const [i, tab] of get().tabs.entries()) {
+          if (i !== index) releaseTabResources(tab.id);
+        }
         set((s) => {
           const keep = s.tabs[index];
           if (!keep) return;
@@ -198,12 +208,24 @@ export const useTabStore = create<TabState>()(
             tab.execId = executing ? execId : undefined;
           });
         }),
-      setProjectId: (tabId, projectId) =>
+      setProjectId: (tabId, projectId) => {
+        if (get().tabs.find((tab) => tab.id === tabId)?.projectId === projectId) return;
+        releaseTabResources(tabId);
         set((s) => {
           withTab(s, tabId, (tab) => {
             tab.projectId = projectId;
+            tab.result = undefined;
+            tab.virtualQuery = undefined;
+            tab.explainResult = undefined;
+            tab.editSession = undefined;
+            tab.isExecuting = false;
+            tab.execId = undefined;
+            tab.isSplitExecuting = false;
+            tab.splitExecId = undefined;
+            tab.splitResult = undefined;
           });
-        }),
+        });
+      },
       setExplainResult: (tabId, plan) =>
         set((s) => {
           withTab(s, tabId, (tab) => {
@@ -218,10 +240,17 @@ export const useTabStore = create<TabState>()(
         }),
 
       toggleSplit: (tabId) => {
+        if (get().tabs.find((tab) => tab.id === tabId)?.isSplit) {
+          cancelExecution(tabId, "split");
+        }
         set((s) => {
           withTab(s, tabId, (tab) => {
             if (tab.type !== "query") return;
             tab.isSplit = !tab.isSplit;
+            if (!tab.isSplit) {
+              tab.isSplitExecuting = false;
+              tab.splitExecId = undefined;
+            }
             tab.splitEditorValue = tab.splitEditorValue ?? "";
           });
         });
@@ -238,12 +267,14 @@ export const useTabStore = create<TabState>()(
           withTab(s, tabId, (tab) => {
             tab.splitResult = result;
             tab.isSplitExecuting = false;
+            tab.splitExecId = undefined;
           });
         }),
-      setSplitExecuting: (tabId, executing) =>
+      setSplitExecuting: (tabId, executing, execId) =>
         set((s) => {
           withTab(s, tabId, (tab) => {
             tab.isSplitExecuting = executing;
+            tab.splitExecId = executing ? execId : undefined;
           });
         }),
       setQueryTimeout: (tabId, timeout) =>

@@ -14,8 +14,6 @@ interface UIState {
   sidebarWidth: number;
   editorHeight: number;
   connectionModalOpen: boolean;
-  viewMode: "grid" | "record";
-  selectedRow: number;
   pinnedResult: PinnedResult | null;
 
   toggleTheme: () => void;
@@ -23,8 +21,6 @@ interface UIState {
   setSidebarWidth: (delta: number) => void;
   setEditorHeight: (delta: number) => void;
   setConnectionModalOpen: (open: boolean) => void;
-  setViewMode: (mode: "grid" | "record") => void;
-  setSelectedRow: (row: number | ((prev: number) => number)) => void;
   pinResult: (result: QueryResult, label: string) => void;
   clearPinnedResult: () => void;
 }
@@ -35,8 +31,6 @@ export const useUIStore = create<UIState>()(
     sidebarWidth: 280,
     editorHeight: 50,
     connectionModalOpen: false,
-    viewMode: "grid",
-    selectedRow: 0,
     pinnedResult: null,
 
     toggleTheme: () => {
@@ -74,14 +68,6 @@ export const useUIStore = create<UIState>()(
     },
 
     setConnectionModalOpen: (open) => set({ connectionModalOpen: open }),
-
-    setViewMode: (mode) => set({ viewMode: mode }),
-
-    setSelectedRow: (row) => {
-      set((s) => {
-        s.selectedRow = typeof row === "function" ? row(s.selectedRow) : row;
-      });
-    },
 
     pinResult: (result, label) => {
       set((s) => {

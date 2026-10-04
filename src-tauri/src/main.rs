@@ -14,7 +14,6 @@ const LOCAL_DB_NAME: &str = "rsql.db";
 use deadpool_postgres::Pool;
 use std::{collections::BTreeMap, sync::Arc};
 use tokio::sync::Mutex;
-use tokio_postgres::CancelToken;
 use tracing::Level;
 
 pub struct AppState {
@@ -22,7 +21,7 @@ pub struct AppState {
     pub meta_clients: Arc<Mutex<BTreeMap<String, Arc<Pool>>>>,
     /// Keyed by exec id, not project: a project can have several queries in
     /// flight and cancelling must hit the one the user asked for.
-    pub cancel_tokens: Arc<Mutex<BTreeMap<String, (String, CancelToken)>>>,
+    pub(crate) executions: Arc<drivers::pgsql::commands::executions::QueryExecutions>,
     pub client_ssl: Arc<Mutex<BTreeMap<String, bool>>>,
     pub local_db: libsql::Database,
     pub resource_monitor: Arc<Mutex<utils::ResourceMonitor>>,

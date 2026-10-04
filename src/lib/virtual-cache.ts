@@ -5,6 +5,15 @@ import type { CellValue } from "@/lib/wire";
 // Max pages per query controlled by evictDistant()
 
 const cache = new Map<string, Map<number, CellValue[][]>>();
+const viewportRows = new Map<string, number>();
+
+export function getViewportRow(queryId: string): number {
+  return viewportRows.get(queryId) ?? 0;
+}
+
+export function setViewportRow(queryId: string, row: number): void {
+  viewportRows.set(queryId, row);
+}
 
 export function setPage(queryId: string, pageIndex: number, rows: CellValue[][]): void {
   if (!cache.has(queryId)) cache.set(queryId, new Map());
@@ -27,6 +36,7 @@ export function hasPage(queryId: string, pageIndex: number): boolean {
 
 export function clearQuery(queryId: string): void {
   cache.delete(queryId);
+  viewportRows.delete(queryId);
 }
 
 export function evictDistant(queryId: string, currentPage: number, maxPages: number): void {

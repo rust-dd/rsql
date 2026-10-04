@@ -1,10 +1,12 @@
 pub mod admin_commands;
+pub(crate) mod executions;
 pub mod metadata_commands;
 pub mod mutation_commands;
 pub mod object_info_commands;
 pub mod pool_connection;
 pub mod pubsub_commands;
 pub mod query_commands;
+pub(crate) mod query_session;
 pub mod statistics_commands;
 
 pub use admin_commands::*;

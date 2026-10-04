@@ -14,12 +14,9 @@ import {
   X,
   XCircle,
 } from "lucide-react";
-import { useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
-import { DriverFactory } from "@/lib/database-driver";
 import { cn } from "@/lib/utils";
-import * as virtualCache from "@/lib/virtual-cache";
 import { useProjectStore } from "@/stores/project-store";
 import { useTabStore } from "@/stores/tab-store";
 
@@ -33,43 +30,9 @@ export function TabBar() {
   const openTab = useTabStore((s) => s.openTab);
   const { menu, showMenu, closeMenu } = useContextMenu();
 
-  const cleanupVirtual = useCallback(
-    (idx: number) => {
-      const tab = tabs[idx];
-      if (tab?.virtualQuery?.queryId && tab.projectId) {
-        const d = useProjectStore.getState().projects[tab.projectId];
-        if (d)
-          DriverFactory.getDriver(d.driver)
-            .closeVirtual?.(tab.projectId, tab.virtualQuery.queryId)
-            .catch(() => {});
-        virtualCache.clearQuery(tab.virtualQuery.queryId);
-      }
-    },
-    [tabs],
-  );
-
-  const handleCloseTab = useCallback(
-    (idx: number) => {
-      cleanupVirtual(idx);
-      closeTab(idx);
-    },
-    [cleanupVirtual, closeTab],
-  );
-
-  const handleCloseAll = useCallback(() => {
-    for (let i = 0; i < tabs.length; i++) cleanupVirtual(i);
-    closeAllTabs();
-  }, [tabs, cleanupVirtual, closeAllTabs]);
-
-  const handleCloseOthers = useCallback(
-    (idx: number) => {
-      for (let i = 0; i < tabs.length; i++) {
-        if (i !== idx) cleanupVirtual(i);
-      }
-      closeOtherTabs(idx);
-    },
-    [tabs, cleanupVirtual, closeOtherTabs],
-  );
+  const handleCloseTab = closeTab;
+  const handleCloseAll = closeAllTabs;
+  const handleCloseOthers = closeOtherTabs;
 
   const openTerminalTab = useTabStore((s) => s.openTerminalTab);
   const projects = useProjectStore((s) => s.projects);

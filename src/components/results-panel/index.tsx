@@ -1,8 +1,8 @@
 import { Loader2, X, XCircle } from "lucide-react";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { DriverFactory } from "@/lib/database-driver";
+import { hasGeometryColumn } from "@/lib/geometry";
+import { cancelTabQuery, executeTabQuery } from "@/lib/query-execution";
 import { cellText } from "@/lib/wire";
-import { useProjectStore } from "@/stores/project-store";
 import { useActiveTab } from "@/stores/tab-store";
 import { useUIStore } from "@/stores/ui-store";
 import { ExplainPanel } from "../explain-panel";
@@ -11,6 +11,7 @@ import { ResultsGrid } from "../results-grid";
 import { ResultsMap } from "../results-map";
 import { ResultsRecord } from "../results-record";
 import { DiffView } from "./diff-view";
+import { EmptyResults, QueryFeedback } from "./feedback";
 import { ResultsToolbar } from "./toolbar";
 import type { PanelView } from "./types";
 import { useEditMode } from "./use-edit-mode";
@@ -18,40 +19,50 @@ import { useVirtualPaging } from "./use-virtual-paging";
 
 export function ResultsPanel() {
   const activeTab = useActiveTab();
-  const viewMode = useUIStore((s) => s.viewMode);
-  const setViewMode = useUIStore((s) => s.setViewMode);
-  const pinnedResult = useUIStore((s) => s.pinnedResult);
-  const [panelView, setPanelView] = useState<PanelView>("grid");
-  const [searchTerm, setSearchTerm] = useState("");
-  const [debouncedSearch, setDebouncedSearch] = useState("");
+  return <ResultsPanelContent key={activeTab?.id ?? "empty"} />;
+}
 
-  // Debounce search term — avoids filtering 50K rows on every keystroke
+function ResultsPanelContent() {
+  const activeTab = useActiveTab();
+  const pinnedResult = useUIStore((s) => s.pinnedResult);
+  const [requestedView, setPanelView] = useState<PanelView>("grid");
+  const result = activeTab?.result;
+  const [filter, setFilter] = useState({ result, term: "" });
+  const [debouncedFilter, setDebouncedFilter] = useState(filter);
+  const searchTerm = filter.result === result ? filter.term : "";
+  const debouncedSearch = debouncedFilter.result === result ? debouncedFilter.term : "";
+  const setSearchTerm = useCallback((term: string) => setFilter({ result, term }), [result]);
+
   useEffect(() => {
-    if (!searchTerm.trim()) {
-      setDebouncedSearch("");
+    if (!filter.term.trim()) {
+      setDebouncedFilter(filter);
       return;
     }
-    const timer = setTimeout(() => setDebouncedSearch(searchTerm), 200);
+    const timer = setTimeout(() => setDebouncedFilter(filter), 200);
     return () => clearTimeout(timer);
-  }, [searchTerm]);
+  }, [filter]);
 
-  const result = activeTab?.result;
   const isExecuting = activeTab?.isExecuting;
   const vq = activeTab?.virtualQuery;
 
-  const handleCancel = useCallback(async () => {
-    if (!activeTab?.projectId || !activeTab.isExecuting || !activeTab.execId) return;
-    const d = useProjectStore.getState().projects[activeTab.projectId];
-    if (!d) return;
-    try {
-      const driver = DriverFactory.getDriver(d.driver);
-      await driver.cancelQuery?.(activeTab.execId);
-    } catch (err) {
-      console.error("Failed to cancel query:", err);
-    }
-  }, [activeTab?.projectId, activeTab?.isExecuting, activeTab?.execId]);
+  const handleCancel = useCallback(() => cancelTabQuery(), []);
+  const panelView =
+    (requestedView === "record" && (vq || !result?.rows.length)) ||
+    (requestedView === "explain" && !activeTab?.explainResult) ||
+    (requestedView === "diff" && !pinnedResult) ||
+    (requestedView === "map" && (!result || !hasGeometryColumn(result.columns, result.rows))) ||
+    (requestedView !== "history" && result?.status && result.status !== "success")
+      ? "grid"
+      : requestedView;
 
-  const { gridRef, handlePageNeeded, handleViewportRowChange, restoreRowIndex } = useVirtualPaging({
+  const {
+    gridRef,
+    handlePageNeeded,
+    handleViewportRowChange,
+    restoreRowIndex,
+    pageError,
+    retryPages,
+  } = useVirtualPaging({
     vq,
     projectId: activeTab?.projectId,
   });
@@ -85,13 +96,13 @@ export function ResultsPanel() {
   });
 
   const filteredRows = useMemo(() => {
-    if (isEditing) return result?.rows ?? [];
+    if (isEditing || vq) return result?.rows ?? [];
     if (!result || !debouncedSearch.trim()) return result?.rows ?? [];
     const term = debouncedSearch.toLowerCase();
     return result.rows.filter((row) =>
       row.some((cell) => cellText(cell).toLowerCase().includes(term)),
     );
-  }, [result, debouncedSearch, isEditing]);
+  }, [result, debouncedSearch, isEditing, vq]);
 
   const explainResult = activeTab?.explainResult;
   const hasExplain = !!explainResult;
@@ -101,8 +112,6 @@ export function ResultsPanel() {
     setPanelView,
     searchTerm,
     setSearchTerm,
-    setViewMode,
-    viewMode,
     hasExplain,
     isExecuting: !!isExecuting,
     isEditing,
@@ -189,6 +198,21 @@ export function ResultsPanel() {
     );
   }
 
+  if (result?.status && result.status !== "success") {
+    return (
+      <div className="flex h-full min-h-0 flex-col border-t border-border bg-card">
+        <ResultsToolbar
+          {...toolbarProps}
+          result={result}
+          columns={[]}
+          filteredRows={[]}
+          filteredCount={0}
+        />
+        <QueryFeedback result={result} onRetry={() => void executeTabQuery()} />
+      </div>
+    );
+  }
+
   if (panelView === "map" && result) {
     return (
       <div className="flex h-full flex-col border-t border-border bg-card">
@@ -199,6 +223,15 @@ export function ResultsPanel() {
           filteredRows={filteredRows}
           filteredCount={filteredRows.length}
         />
+        {vq && (
+          <p
+            role="status"
+            className="border-b border-border px-4 py-2 text-xs text-muted-foreground"
+          >
+            Map shows the first {result.rows.length.toLocaleString()} of{" "}
+            {vq.totalRows.toLocaleString()} rows. Narrow your query to map the full result.
+          </p>
+        )}
         <ResultsMap columns={result.columns} rows={filteredRows} />
       </div>
     );
@@ -215,7 +248,10 @@ export function ResultsPanel() {
           filteredCount={0}
         />
         <div className="flex flex-1 items-center justify-center text-muted-foreground">
-          No data to display
+          <div className="space-y-2 text-center">
+            <p className="text-sm font-medium text-foreground">Run a query to see results</p>
+            <p className="text-xs">Choose a connection, write SQL, then select Execute.</p>
+          </div>
         </div>
       </div>
     );
@@ -243,26 +279,46 @@ export function ResultsPanel() {
           </button>
         </div>
       )}
-      {viewMode === "grid" ? (
-        <ResultsGrid
-          key={activeTab?.id ?? "results-grid"}
-          columns={result.columns}
-          rows={filteredRows}
-          isEditing={isEditing}
-          cellEdits={editedCells}
-          deletedRows={deletedRowIndices}
-          onCellEdit={handleCellEdit}
-          onRowDelete={handleRowDelete}
-          onRowRestore={handleRowRestore}
-          fkColumns={fkMap}
-          onFKNavigate={handleFKNavigate}
-          virtualQuery={vq}
-          onPageNeeded={vq ? handlePageNeeded : undefined}
-          onViewportRowChange={vq ? handleViewportRowChange : undefined}
-          restoreRowIndex={vq ? restoreRowIndex : undefined}
-          viewportKey={vq?.queryId}
-          gridRef={gridRef}
-        />
+      {pageError && (
+        <div
+          role="alert"
+          className="flex items-center gap-3 border-b border-border bg-destructive/5 px-4 py-2 text-xs"
+        >
+          <span className="min-w-0 flex-1 text-destructive">Could not load rows: {pageError}</span>
+          <button
+            type="button"
+            onClick={retryPages}
+            className="shrink-0 rounded border border-border px-2 py-1 hover:bg-accent"
+          >
+            Retry
+          </button>
+        </div>
+      )}
+      {panelView !== "record" ? (
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <ResultsGrid
+            key={activeTab?.id ?? "results-grid"}
+            columns={result.columns}
+            rows={filteredRows}
+            isEditing={isEditing}
+            cellEdits={editedCells}
+            deletedRows={deletedRowIndices}
+            onCellEdit={handleCellEdit}
+            onRowDelete={handleRowDelete}
+            onRowRestore={handleRowRestore}
+            fkColumns={fkMap}
+            onFKNavigate={handleFKNavigate}
+            virtualQuery={vq}
+            onPageNeeded={vq ? handlePageNeeded : undefined}
+            onViewportRowChange={vq ? handleViewportRowChange : undefined}
+            restoreRowIndex={vq ? restoreRowIndex : undefined}
+            viewportKey={vq?.queryId}
+            gridRef={gridRef}
+          />
+          {!vq && filteredRows.length === 0 && !isExecuting && result.columns.length > 0 && (
+            <EmptyResults filtered={!!debouncedSearch.trim()} onClear={() => setSearchTerm("")} />
+          )}
+        </div>
       ) : (
         <ResultsRecord columns={result.columns} rows={filteredRows} />
       )}

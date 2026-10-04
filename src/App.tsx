@@ -13,6 +13,7 @@ import { QueryEditor } from "@/components/query-editor";
 import { ResizeHandle } from "@/components/resize-handle";
 import { ResultsGrid } from "@/components/results-grid";
 import { ResultsPanel } from "@/components/results-panel";
+import { QueryFeedback } from "@/components/results-panel/feedback";
 import { RolesPanel } from "@/components/roles-panel";
 import { SchemaDiffPanel } from "@/components/schema-diff-panel";
 import { ServerSidebar } from "@/components/server-sidebar";
@@ -51,7 +52,7 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   useAppStartup();
-  const { runQuery, runExplain, cancelQuery, runSplitQuery } = useQueryLifecycle({
+  const { runQuery, runExplain, cancelQuery, runSplitQuery, cancelSplitQuery } = useQueryLifecycle({
     setCommandPaletteOpen,
   });
 
@@ -217,6 +218,19 @@ export default function App() {
                 </div>
                 {/* Right pane */}
                 <div className="flex flex-1 flex-col overflow-hidden">
+                  <div className="flex items-center justify-between border-b border-border px-3 py-1 text-xs">
+                    <span className="text-muted-foreground">Right query</span>
+                    <button
+                      type="button"
+                      onClick={() =>
+                        activeTab.isSplitExecuting ? cancelSplitQuery() : void runSplitQuery()
+                      }
+                      disabled={!activeTab.projectId || !activeTab.splitEditorValue?.trim()}
+                      className="rounded border border-border px-2 py-1 hover:bg-accent disabled:opacity-40"
+                    >
+                      {activeTab.isSplitExecuting ? "Stop right query" : "Run right query"}
+                    </button>
+                  </div>
                   <div
                     style={{ height: `${editorHeight}%` }}
                     className="flex flex-col overflow-hidden"
@@ -235,6 +249,12 @@ export default function App() {
                       <div className="flex-1 flex items-center justify-center text-muted-foreground">
                         <span className="animate-spin mr-2">⏳</span> Running...
                       </div>
+                    ) : activeTab.splitResult?.status &&
+                      activeTab.splitResult.status !== "success" ? (
+                      <QueryFeedback
+                        result={activeTab.splitResult}
+                        onRetry={() => void runSplitQuery()}
+                      />
                     ) : activeTab.splitResult ? (
                       <div className="flex-1 flex flex-col overflow-hidden">
                         <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30 text-xs font-mono text-muted-foreground">
@@ -243,7 +263,7 @@ export default function App() {
                             <span>· {activeTab.splitResult.time.toFixed(1)}ms</span>
                           )}
                         </div>
-                        <div className="flex-1 min-h-0">
+                        <div className="flex flex-1 min-h-0 flex-col">
                           <ResultsGrid
                             columns={activeTab.splitResult.columns}
                             rows={activeTab.splitResult.rows}

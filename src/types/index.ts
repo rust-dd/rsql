@@ -53,6 +53,7 @@ export interface Tab {
   splitEditorValue?: string;
   splitResult?: QueryResult;
   isSplitExecuting?: boolean;
+  splitExecId?: string;
   /** Pending inline row edits. Lives on the tab so it cannot leak across tabs. */
   editSession?: EditSession;
 }
@@ -95,6 +96,8 @@ export interface QueryResult {
   rows: CellValue[][];
   time: number;
   capped?: boolean;
+  status?: "success" | "error" | "cancelled";
+  message?: string;
 }
 
 export interface VirtualQuery {

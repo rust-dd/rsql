@@ -146,7 +146,7 @@ export function EditorToolbar({
           size="sm"
           className="h-7 gap-1.5 text-xs px-2"
           onClick={onExplain}
-          disabled={!activeProject || activeTab.isExecuting}
+          disabled={!activeProject || !hasContent || activeTab.isExecuting}
         >
           <GitBranch className="h-3.5 w-3.5" />
           Explain
@@ -173,7 +173,7 @@ export function EditorToolbar({
             size="sm"
             className="h-7 gap-1.5 text-xs px-2.5"
             onClick={onExecute}
-            disabled={!activeProject}
+            disabled={!activeProject || !hasContent}
           >
             <Play className="h-3.5 w-3.5" />
             Execute

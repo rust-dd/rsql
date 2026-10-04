@@ -10,9 +10,10 @@ import {
   Search,
   Square,
   X,
+  XCircle,
 } from "lucide-react";
+import { hasGeometryColumn } from "@/lib/geometry";
 import { useUIStore } from "@/stores/ui-store";
-import { hasGeometryColumn } from "../results-map";
 import { ToolbarEdit } from "./toolbar-edit";
 import { ToolbarExport } from "./toolbar-export";
 import type { ToolbarProps } from "./types";
@@ -27,8 +28,6 @@ export function ResultsToolbar(props: ToolbarProps) {
     searchTerm,
     setSearchTerm,
     filteredCount,
-    setViewMode,
-    viewMode,
     hasExplain,
     isExecuting,
     isEditing,
@@ -52,18 +51,18 @@ export function ResultsToolbar(props: ToolbarProps) {
   const clearPinnedResult = useUIStore((s) => s.clearPinnedResult);
 
   return (
-    <div className="flex items-center justify-between border-b border-border/50 bg-card/80 backdrop-blur px-4 py-2 flex-shrink-0">
-      <div className="flex items-center gap-3">
+    <div className="flex flex-wrap items-center justify-between gap-2 border-b border-border/50 bg-card/80 backdrop-blur px-4 py-2 flex-shrink-0">
+      <div className="flex min-w-0 flex-wrap items-center gap-3">
         {/* Panel tabs — segment control */}
         <div className="inline-flex rounded-lg bg-muted p-0.5">
           <button
             type="button"
+            aria-pressed={panelView === "grid"}
             onClick={() => {
               setPanelView("grid");
-              setViewMode("grid");
             }}
             className={`px-2 py-0.5 rounded-md text-xs font-mono transition-all duration-150 ${
-              panelView !== "history" && viewMode === "grid"
+              panelView === "grid"
                 ? "bg-accent text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
@@ -72,22 +71,24 @@ export function ResultsToolbar(props: ToolbarProps) {
           </button>
           <button
             type="button"
+            aria-pressed={panelView === "record"}
             onClick={() => {
               setPanelView("record");
-              setViewMode("record");
             }}
             className={`px-2 py-0.5 rounded-md text-xs font-mono transition-all duration-150 ${
-              panelView !== "history" && viewMode === "record"
+              panelView === "record"
                 ? "bg-accent text-foreground shadow-sm"
                 : "text-muted-foreground hover:text-foreground"
             }`}
             disabled={!result?.rows.length || !!virtualQuery}
+            title={virtualQuery ? "Narrow the query to use Record view." : undefined}
           >
             Record
           </button>
           {hasExplain && (
             <button
               type="button"
+              aria-pressed={panelView === "explain"}
               onClick={() => setPanelView("explain")}
               className={`px-2 py-0.5 rounded-md text-xs font-mono transition-all duration-150 flex items-center gap-1 ${
                 panelView === "explain"
@@ -101,6 +102,7 @@ export function ResultsToolbar(props: ToolbarProps) {
           )}
           <button
             type="button"
+            aria-pressed={panelView === "history"}
             onClick={() => setPanelView("history")}
             className={`px-2 py-0.5 rounded-md text-xs font-mono transition-all duration-150 flex items-center gap-1 ${
               panelView === "history"
@@ -114,6 +116,7 @@ export function ResultsToolbar(props: ToolbarProps) {
           {result && hasGeometryColumn(columns, filteredRows) && (
             <button
               type="button"
+              aria-pressed={panelView === "map"}
               onClick={() => setPanelView("map")}
               className={`px-2 py-0.5 rounded-md text-xs font-mono transition-all duration-150 flex items-center gap-1 ${
                 panelView === "map"
@@ -131,15 +134,23 @@ export function ResultsToolbar(props: ToolbarProps) {
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
             {isExecuting ? (
               <Loader2 className="h-3 w-3 animate-spin text-primary" />
+            ) : result.status === "error" ? (
+              <XCircle className="h-3 w-3 text-destructive" />
+            ) : result.status === "cancelled" ? (
+              <Square className="h-3 w-3" />
             ) : (
               <CheckCircle2 className="h-3 w-3 text-success" />
             )}
             <span>
-              {virtualQuery
-                ? `${virtualQuery.totalRows.toLocaleString()} rows (virtual)`
-                : searchTerm
-                  ? `${filteredCount.toLocaleString()} / ${result.rows.length.toLocaleString()} rows`
-                  : `${result.rows.length.toLocaleString()} rows`}
+              {result.status === "error"
+                ? "Failed"
+                : result.status === "cancelled"
+                  ? "Cancelled"
+                  : virtualQuery
+                    ? `${virtualQuery.totalRows.toLocaleString()} rows`
+                    : searchTerm
+                      ? `${filteredCount.toLocaleString()} / ${result.rows.length.toLocaleString()} rows`
+                      : `${result.rows.length.toLocaleString()} rows`}
               {result.capped && (
                 <span
                   className="text-warning ml-1"
@@ -184,7 +195,7 @@ export function ResultsToolbar(props: ToolbarProps) {
         )}
       </div>
 
-      <div className="flex items-center gap-2">
+      <div className="flex flex-wrap items-center gap-2">
         {/* Edit mode controls */}
         {isEditing ? (
           <ToolbarEdit
@@ -268,12 +279,16 @@ export function ResultsToolbar(props: ToolbarProps) {
             )}
 
             {/* Search */}
-            {panelView !== "history" && result && !virtualQuery && (
+            {panelView !== "history" && result && columns.length > 0 && !virtualQuery && (
               <div className="relative flex items-center">
                 <Search className="absolute left-2 h-3 w-3 text-muted-foreground pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search results..."
+                  aria-label="Search results"
+                  onKeyDown={(event) => {
+                    if (event.key === "Escape") setSearchTerm("");
+                  }}
                   value={searchTerm}
                   onChange={(e) => setSearchTerm(e.target.value)}
                   className="h-7 w-48 rounded border border-border bg-input pl-7 pr-7 text-xs font-mono text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-ring"
@@ -282,6 +297,7 @@ export function ResultsToolbar(props: ToolbarProps) {
                   <button
                     type="button"
                     onClick={() => setSearchTerm("")}
+                    aria-label="Clear result search"
                     className="absolute right-2 text-muted-foreground hover:text-foreground"
                   >
                     <X className="h-3 w-3" />

@@ -98,7 +98,9 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
         let state = AppState {
             clients: Arc::new(Mutex::new(BTreeMap::new())),
             meta_clients: Arc::new(Mutex::new(BTreeMap::new())),
-            cancel_tokens: Arc::new(Mutex::new(BTreeMap::new())),
+            executions: Arc::new(
+                crate::drivers::pgsql::commands::executions::QueryExecutions::default(),
+            ),
             client_ssl: Arc::new(Mutex::new(BTreeMap::new())),
             local_db: db,
             resource_monitor: Arc::new(Mutex::new(utils::ResourceMonitor::new())),

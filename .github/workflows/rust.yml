@@ -71,7 +71,7 @@ jobs:
       - name: Integration tests against PostgreSQL
         run: |
           cargo test --locked --test row_mutations --test csv_import --test schema_index -- --ignored
-          cargo test --locked --bin rsql drivers::pgsql::query_execution::tests -- --ignored
+          cargo test --locked --bin rsql -- --ignored
         working-directory: src-tauri
         env:
           RSQL_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres

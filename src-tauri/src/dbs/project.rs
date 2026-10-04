@@ -135,13 +135,7 @@ pub async fn project_db_delete(project_id: &str, app_state: State<'_, AppState>)
     app_state.meta_clients.lock().await.remove(project_id);
     app_state.client_ssl.lock().await.remove(project_id);
 
-    // Cancel tokens are keyed by exec id, so drop every one belonging to this
-    // project rather than looking the project id up as a key.
-    app_state
-        .cancel_tokens
-        .lock()
-        .await
-        .retain(|_, (owner, _)| owner != project_id);
+    app_state.executions.cancel_project(project_id);
 
     // A LISTEN task and an SSH tunnel outlive the project otherwise: the task
     // keeps polling a connection that is gone, and the tunnel holds its port.

@@ -1,18 +1,17 @@
 import type { CellValue } from "@/lib/wire";
+import type { QueryResult } from "@/types";
 
 export type PanelView = "grid" | "record" | "history" | "explain" | "diff" | "map";
 
 export interface ToolbarProps {
   panelView: PanelView;
   setPanelView: (v: PanelView) => void;
-  result: { rows: CellValue[][]; time: number; capped?: boolean } | null;
+  result: QueryResult | null;
   columns: string[];
   filteredRows: CellValue[][];
   searchTerm: string;
   setSearchTerm: (v: string) => void;
   filteredCount: number;
-  setViewMode: (mode: "grid" | "record") => void;
-  viewMode: "grid" | "record";
   hasExplain: boolean;
   isExecuting: boolean;
   isEditing: boolean;
