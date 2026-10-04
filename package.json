@@ -46,7 +46,7 @@
     "sonner": "^2.0.7",
     "sql-formatter": "^15.7.2",
     "tailwind-merge": "^3.3.1",
-    "zustand": "^5.0.11"
+    "zustand": "^5.0.15"
   },
   "devDependencies": {
     "@biomejs/biome": "2.4.15",
