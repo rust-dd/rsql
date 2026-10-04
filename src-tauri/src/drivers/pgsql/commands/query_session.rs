@@ -8,6 +8,7 @@ use tokio_postgres::NoTls;
 
 use super::executions::wait_for_cancel;
 use super::pool_connection::acquire_client;
+use super::session_cleanup::reset_session;
 use crate::AppState;
 use crate::common::enums::{AppError, query_failed};
 
@@ -97,11 +98,7 @@ where
         return Err(cancelled());
     };
 
-    // User SQL can leave an aborted transaction, in which RESET alone fails.
-    let reset = client
-        .batch_execute("ROLLBACK; RESET statement_timeout")
-        .await;
-    if let Err(error) = reset {
+    if let Err(error) = reset_session(&client).await {
         drop(Client::take(client));
         tracing::warn!(%error, "Discarding query connection after session cleanup failed");
         return result.and(Err(query_failed(error)));

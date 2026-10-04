@@ -7,6 +7,7 @@ pub mod pool_connection;
 pub mod pubsub_commands;
 pub mod query_commands;
 pub(crate) mod query_session;
+mod session_cleanup;
 pub mod statistics_commands;
 
 pub use admin_commands::*;
