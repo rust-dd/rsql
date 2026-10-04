@@ -5304,9 +5304,9 @@ dependencies = [
 
 [[package]]
 name = "sonic-rs"
-version = "0.5.7"
+version = "0.5.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e16b39f36452a4fa6f14a481b02e9ba5c6842c6a44d0545da967eca122f2eed9"
+checksum = "756586caeeb21126a57c17d1ef2b9386e2613ba784aae0f27104f5e9982335ec"
 dependencies = [
  "ahash",
  "bumpalo",
