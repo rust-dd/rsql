@@ -1,5 +1,4 @@
 use super::*;
-use russh::keys::ssh_key::rand_core::OsRng;
 use russh::server::{self, Server as _};
 use std::sync::atomic::{AtomicUsize, Ordering};
 
@@ -35,7 +34,7 @@ impl server::Handler for TestServer {
 #[tokio::test]
 #[ignore = "requires a local TCP listener"]
 async fn unknown_and_changed_keys_are_rejected_before_password_or_key_authentication() {
-    let host_key = keys::PrivateKey::random(&mut OsRng, keys::Algorithm::Ed25519).unwrap();
+    let host_key = keys::PrivateKey::random(&mut rand::rng(), keys::Algorithm::Ed25519).unwrap();
     let fingerprint = host_key
         .public_key()
         .fingerprint(keys::HashAlg::Sha256)
@@ -50,7 +49,7 @@ async fn unknown_and_changed_keys_are_rejected_before_password_or_key_authentica
         ..Default::default()
     });
     let task = tokio::spawn(async move { server.run_on_socket(config, &socket).await });
-    let user_key = keys::PrivateKey::random(&mut OsRng, keys::Algorithm::Ed25519).unwrap();
+    let user_key = keys::PrivateKey::random(&mut rand::rng(), keys::Algorithm::Ed25519).unwrap();
     let key_path =
         std::env::temp_dir().join(format!("rsql-ssh-test-{}-{port}", std::process::id()));
     user_key

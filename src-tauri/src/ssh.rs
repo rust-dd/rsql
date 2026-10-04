@@ -59,9 +59,10 @@ impl client::Handler for Client {
 
     async fn check_server_key(
         &mut self,
-        server_public_key: &keys::PublicKey,
+        server_public_key: &keys::PublicKeyOrCertificate,
     ) -> Result<bool, Self::Error> {
         let fingerprint = server_public_key
+            .public_key()
             .fingerprint(keys::HashAlg::Sha256)
             .to_string();
         if self.expected_fingerprint.as_deref() == Some(&fingerprint) {

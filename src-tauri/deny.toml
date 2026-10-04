@@ -1,0 +1,6 @@
+[advisories]
+# GTK's transitive proc-macro-error is unmaintained; replacing it requires upstream work.
+unmaintained = "workspace"
+ignore = [
+    { id = "RUSTSEC-2023-0071", reason = "No patched rsa version exists. Retain russh RSA authentication compatibility; the client uses SSH signatures, not RSA decryption, and verifies host trust before authentication. Track https://github.com/RustCrypto/RSA/issues/626 and re-evaluate when updating russh/rsa. This exception does not assert the crypto is constant-time." },
+]

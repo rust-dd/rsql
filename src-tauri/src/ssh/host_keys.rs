@@ -2,7 +2,6 @@ use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
 use libsql::{Connection, TransactionBehavior};
-use russh::keys::ssh_key::rand_core::{OsRng, RngCore};
 use serde::Serialize;
 use tokio::sync::Mutex;
 
@@ -67,8 +66,7 @@ impl HostKeyApprovals {
         fingerprint: String,
         previous_fingerprint: Option<String>,
     ) -> HostKeyChallenge {
-        let mut random = [0u8; 16];
-        OsRng.fill_bytes(&mut random);
+        let random = rand::random::<[u8; 16]>();
         let id = random
             .iter()
             .map(|byte| format!("{byte:02x}"))
