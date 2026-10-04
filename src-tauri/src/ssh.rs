@@ -1,4 +1,8 @@
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
+
+pub(crate) mod host_keys;
+#[cfg(test)]
+mod tests;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 
@@ -22,30 +26,77 @@ impl Drop for SshTunnel {
     }
 }
 
-struct Client;
+struct Client {
+    expected_fingerprint: Option<String>,
+    rejected_key: Arc<Mutex<Option<String>>>,
+}
+
+#[derive(Debug, thiserror::Error)]
+pub(crate) enum TunnelError {
+    #[error("Untrusted SSH host key: {0}")]
+    HostKey(String),
+    #[error("{0}")]
+    Connection(String),
+}
+
+impl From<String> for TunnelError {
+    fn from(message: String) -> Self {
+        Self::Connection(message)
+    }
+}
+
+pub(crate) struct SshConnection<'a> {
+    pub host: &'a str,
+    pub port: u16,
+    pub user: &'a str,
+    pub password: Option<&'a str>,
+    pub key_path: Option<&'a str>,
+    pub expected_fingerprint: Option<String>,
+}
 
 impl client::Handler for Client {
     type Error = russh::Error;
 
     async fn check_server_key(
         &mut self,
-        _server_public_key: &keys::PublicKey,
+        server_public_key: &keys::PublicKey,
     ) -> Result<bool, Self::Error> {
-        Ok(true)
+        let fingerprint = server_public_key
+            .fingerprint(keys::HashAlg::Sha256)
+            .to_string();
+        if self.expected_fingerprint.as_deref() == Some(&fingerprint) {
+            Ok(true)
+        } else {
+            *self.rejected_key.lock().expect("host key lock poisoned") = Some(fingerprint);
+            Ok(false)
+        }
     }
 }
 
 async fn connect_ssh(
-    ssh_host: &str,
-    ssh_port: u16,
-    ssh_user: &str,
-    ssh_password: Option<&str>,
-    ssh_key_path: Option<&str>,
-) -> Result<client::Handle<Client>, String> {
+    connection: &SshConnection<'_>,
+) -> Result<client::Handle<Client>, TunnelError> {
     let config = Arc::new(client::Config::default());
-    let mut handle = client::connect(config, (ssh_host, ssh_port), Client)
+    let rejected_key = Arc::new(Mutex::new(None));
+    let handler = Client {
+        expected_fingerprint: connection.expected_fingerprint.clone(),
+        rejected_key: Arc::clone(&rejected_key),
+    };
+    let mut handle = client::connect(config, (connection.host, connection.port), handler)
         .await
-        .map_err(|e| format!("SSH connection to {}:{} failed: {}", ssh_host, ssh_port, e))?;
+        .map_err(|error| {
+            if let Some(fingerprint) = rejected_key.lock().expect("host key lock poisoned").take() {
+                TunnelError::HostKey(fingerprint)
+            } else {
+                TunnelError::Connection(format!(
+                    "SSH connection to {}:{} failed: {}",
+                    connection.host, connection.port, error
+                ))
+            }
+        })?;
+    let ssh_user = connection.user;
+    let ssh_password = connection.password;
+    let ssh_key_path = connection.key_path;
 
     if let Some(key_path) = ssh_key_path
         && !key_path.is_empty()
@@ -79,19 +130,19 @@ async fn connect_ssh(
         }
     }
 
-    Err("SSH authentication failed: all methods exhausted".to_string())
+    Err("SSH authentication failed: all methods exhausted"
+        .to_string()
+        .into())
 }
 
-pub async fn start_tunnel(
-    ssh_host: &str,
-    ssh_port: u16,
-    ssh_user: &str,
-    ssh_password: Option<&str>,
-    ssh_key_path: Option<&str>,
+pub(crate) async fn start_tunnel(
+    connection: &SshConnection<'_>,
     remote_host: &str,
     remote_port: u16,
-) -> Result<SshTunnel, String> {
-    let handle = connect_ssh(ssh_host, ssh_port, ssh_user, ssh_password, ssh_key_path).await?;
+) -> Result<SshTunnel, TunnelError> {
+    let handle = tokio::time::timeout(std::time::Duration::from_secs(30), connect_ssh(connection))
+        .await
+        .map_err(|_| TunnelError::Connection("SSH connection timed out".into()))??;
     let handle = Arc::new(handle);
 
     let listener = TcpListener::bind("127.0.0.1:0")

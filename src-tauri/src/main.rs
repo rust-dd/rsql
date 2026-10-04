@@ -27,6 +27,7 @@ pub struct AppState {
     pub resource_monitor: Arc<Mutex<utils::ResourceMonitor>>,
     pub virtual_cache: Arc<Mutex<drivers::pgsql::VirtualCache>>,
     pub notify_handles: Arc<Mutex<BTreeMap<String, tokio::task::JoinHandle<()>>>>,
+    pub(crate) ssh_host_keys: Arc<ssh::host_keys::HostKeyApprovals>,
     pub ssh_tunnels: Arc<Mutex<BTreeMap<String, ssh::SshTunnel>>>,
 }
 
@@ -45,6 +46,7 @@ fn main() {
         .plugin(tauri_plugin_process::init())
         .setup(app_setup::setup_app)
         .invoke_handler(tauri::generate_handler![
+            ssh::host_keys::ssh_trust_host_key,
             dbs::project::project_db_select,
             dbs::project::project_db_insert,
             dbs::project::project_db_delete,

@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import type { MutationReport, RowMutation } from "@/lib/mutations";
+import { connectWithHostKeyVerification } from "@/lib/ssh-trust";
 import { decodeColumns, decodePage } from "@/lib/wire";
 import type { SchemaIndex } from "@/monaco/completion/types";
 import type { DbGrant, PgRole, ProjectConnectionStatus, SchemaObject, TableGrant } from "@/types";
@@ -38,11 +39,13 @@ export class PostgreSQLDriver implements DatabaseDriver {
     key: [string, string, string, string, string, string],
     ssh?: string[],
   ) {
-    return invoke<ProjectConnectionStatus>("pgsql_connector", {
-      project_id: projectId,
-      key,
-      ssh: ssh ?? null,
-    });
+    return connectWithHostKeyVerification(() =>
+      invoke<ProjectConnectionStatus>("pgsql_connector", {
+        project_id: projectId,
+        key,
+        ssh: ssh ?? null,
+      }),
+    );
   }
   async cancelQuery(execId: string) {
     return invoke<boolean>("pgsql_cancel_query", { exec_id: execId });

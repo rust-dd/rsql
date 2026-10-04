@@ -95,6 +95,10 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
             .ok(); // Ignore "column already exists" errors
         }
 
+        crate::ssh::host_keys::initialize(&conn)
+            .await
+            .expect("Failed to initialize SSH host keys");
+
         let state = AppState {
             clients: Arc::new(Mutex::new(BTreeMap::new())),
             meta_clients: Arc::new(Mutex::new(BTreeMap::new())),
@@ -107,6 +111,7 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
             virtual_cache: Arc::new(Mutex::new(BTreeMap::new())),
             notify_handles: Arc::new(Mutex::new(BTreeMap::new())),
             ssh_tunnels: Arc::new(Mutex::new(BTreeMap::new())),
+            ssh_host_keys: Arc::new(crate::ssh::host_keys::HostKeyApprovals::default()),
         };
         app_handle.manage(state);
 

@@ -191,17 +191,39 @@ pub async fn pgsql_connector(
 
             app_state.ssh_tunnels.lock().await.remove(project_id);
 
-            let tunnel = crate::ssh::start_tunnel(
-                ssh_host,
-                ssh_port,
-                ssh_user,
-                ssh_password,
-                ssh_key_path,
+            let conn = app_state
+                .local_db
+                .connect()
+                .map_err(|error| AppError::DatabaseError(error.to_string()))?;
+            let expected =
+                crate::ssh::host_keys::known_fingerprint(&conn, ssh_host, ssh_port).await?;
+            let connection = crate::ssh::SshConnection {
+                host: ssh_host,
+                port: ssh_port,
+                user: ssh_user,
+                password: ssh_password,
+                key_path: ssh_key_path,
+                expected_fingerprint: expected.clone(),
+            };
+            let tunnel = match crate::ssh::start_tunnel(
+                &connection,
                 &host,
                 port_str.parse().unwrap_or(5432),
             )
             .await
-            .map_err(AppError::ConnectionFailed)?;
+            {
+                Ok(tunnel) => tunnel,
+                Err(crate::ssh::TunnelError::HostKey(fingerprint)) => {
+                    let challenge = app_state
+                        .ssh_host_keys
+                        .challenge(ssh_host, ssh_port, fingerprint, expected)
+                        .await;
+                    let json = serde_json::to_string(&challenge)
+                        .map_err(|error| AppError::SerializationError(error.to_string()))?;
+                    return Err(AppError::ConnectionFailed(format!("SSH_HOST_KEY:{json}")).into());
+                }
+                Err(error) => return Err(AppError::ConnectionFailed(error.to_string()).into()),
+            };
 
             let local_port = tunnel.local_port;
             app_state

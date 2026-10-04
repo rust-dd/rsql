@@ -10,6 +10,7 @@ vi.hoisted(() => {
     setItem: (key: string, value: string) => entries.set(key, value),
     removeItem: (key: string) => entries.delete(key),
   });
+  vi.stubGlobal("window", { localStorage: globalThis.localStorage });
 });
 
 const { driver, projectState, history } = vi.hoisted(() => ({
