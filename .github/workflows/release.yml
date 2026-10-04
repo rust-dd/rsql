@@ -207,7 +207,7 @@ jobs:
           chmod 700 "$HOME/.gnupg"
           printf '%s' "${TAURI_SIGNING_RPM_KEY}" | gpg --batch --import
 
-      - uses: tauri-apps/tauri-action@v0
+      - uses: tauri-apps/tauri-action@v1
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
