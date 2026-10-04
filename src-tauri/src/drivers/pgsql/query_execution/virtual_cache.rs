@@ -1,62 +1,62 @@
 use futures_util::{TryStreamExt, pin_mut};
+use std::sync::Arc;
 use std::time::Instant;
 use tokio_postgres::{Client, SimpleQueryMessage};
 
 use crate::common::enums::{AppError, query_failed};
 
-use super::super::wire::{ROW_SEP, pack_columns, push_row};
-use super::super::{CachedQuery, VirtualCache};
-use super::helpers::{column_names, row_cells};
+use super::super::VirtualCache;
+use super::super::result_memory::{CachedQuery, MemoryBudget, PackedPage, evict_idle};
+use super::super::wire::{ROW_SEP, pack_columns};
+use super::helpers::column_names;
 
-/// Ceilings on what one result may hold in memory. Reaching either stops
-/// accumulation and marks the result capped. This bounds the client only:
-/// the server still finishes sending the rows it was asked for. Bounding the
-/// server too needs a cursor, which needs a connection pinned for the cursor's
-/// lifetime and is a separate change.
 const MAX_VIRTUAL_ROWS: usize = 1_000_000;
-const MAX_VIRTUAL_BYTES: usize = 512 * 1024 * 1024;
 
-/// Rows packed straight into page-sized strings as they arrive, so the full
-/// result never exists as a second, unpacked copy.
-#[derive(Default)]
 struct PageAccumulator {
     columns: Vec<String>,
-    pages: Vec<String>,
-    current: String,
+    pages: Vec<Arc<PackedPage>>,
+    current: PackedPage,
     rows_in_page: usize,
     total_rows: usize,
-    packed_bytes: usize,
 }
 
 impl PageAccumulator {
-    fn push(&mut self, row: &tokio_postgres::SimpleQueryRow, page_size: usize) {
-        if self.columns.is_empty() {
-            self.columns = column_names(row.columns());
+    fn new(budget: Arc<MemoryBudget>) -> Self {
+        Self {
+            columns: Vec::new(),
+            pages: Vec::new(),
+            current: PackedPage::new(budget),
+            rows_in_page: 0,
+            total_rows: 0,
+        }
+    }
+
+    fn push<'a>(
+        &mut self,
+        cells: impl Iterator<Item = Option<&'a str>> + Clone,
+        page_size: usize,
+        budget: &Arc<MemoryBudget>,
+    ) -> bool {
+        if self.total_rows >= MAX_VIRTUAL_ROWS {
+            return false;
         }
         if self.rows_in_page == page_size {
-            self.packed_bytes += self.current.len();
-            self.pages.push(std::mem::take(&mut self.current));
-            self.rows_in_page = 0;
+            self.flush(budget);
         }
-        if self.rows_in_page > 0 {
-            self.current.push(ROW_SEP);
+        if !self.current.push(cells, self.rows_in_page > 0) {
+            return false;
         }
-        push_row(&mut self.current, &row_cells(row));
         self.rows_in_page += 1;
         self.total_rows += 1;
+        true
     }
 
-    fn at_limit(&self) -> bool {
-        self.total_rows >= MAX_VIRTUAL_ROWS
-            || self.packed_bytes + self.current.len() >= MAX_VIRTUAL_BYTES
-    }
-
-    fn finish(mut self) -> Self {
+    fn flush(&mut self, budget: &Arc<MemoryBudget>) {
         if self.rows_in_page > 0 {
-            self.pages.push(std::mem::take(&mut self.current));
+            let page = std::mem::replace(&mut self.current, PackedPage::new(Arc::clone(budget)));
+            self.pages.push(Arc::new(page));
             self.rows_in_page = 0;
         }
-        self
     }
 
     fn has_rowset(&self) -> bool {
@@ -64,10 +64,8 @@ impl PageAccumulator {
     }
 }
 
-/// Execute a query and pre-pack its rows into page-sized strings held in memory.
-/// Returns (columns_packed, total_rows, first_page_packed, elapsed_ms, capped).
-/// Empty rowsets keep their column header. Scripts without rowsets return an empty
-/// header and a synthetic affected-row message in first_page_packed when applicable.
+/// Retains the last rowset within one budget shared by completed and running queries.
+/// The limit bounds retained data; it does not impose a server-side row limit.
 pub async fn execute_virtual(
     client: &Client,
     cache: &tokio::sync::Mutex<VirtualCache>,
@@ -76,73 +74,63 @@ pub async fn execute_virtual(
     page_size: usize,
 ) -> Result<(String, usize, String, f32, bool), AppError> {
     let start = Instant::now();
-
+    if page_size == 0 {
+        return Err(AppError::QueryFailed("Page size must be positive".into()));
+    }
+    evict_idle(cache).await;
+    let budget = Arc::clone(&cache.lock().await.budget);
     let stream = client.simple_query_raw(sql).await.map_err(query_failed)?;
     pin_mut!(stream);
-
-    let mut accum = PageAccumulator::default();
-    let mut last = None;
+    let mut accum = PageAccumulator::new(Arc::clone(&budget));
     let mut total_affected = 0u64;
     let mut capped = false;
 
     while let Some(message) = stream.try_next().await.map_err(query_failed)? {
         match message {
             SimpleQueryMessage::RowDescription(columns) => {
+                accum = PageAccumulator::new(Arc::clone(&budget));
                 accum.columns = column_names(&columns);
             }
             SimpleQueryMessage::Row(row) => {
-                accum.push(&row, page_size);
-                if accum.at_limit() {
+                if !accum.push((0..row.len()).map(|i| row.get(i)), page_size, &budget) {
                     capped = true;
                     break;
                 }
             }
             SimpleQueryMessage::CommandComplete(n) => {
-                if accum.has_rowset() {
-                    last = Some(std::mem::take(&mut accum).finish());
-                } else {
+                if !accum.has_rowset() {
                     total_affected += n;
-                    accum = PageAccumulator::default();
                 }
             }
             _ => {}
         }
     }
-
-    let result = if accum.has_rowset() {
-        accum.finish()
-    } else {
-        last.unwrap_or_default()
-    };
-
+    accum.flush(&budget);
     let elapsed = start.elapsed().as_millis() as f32;
-
-    if result.columns.is_empty() {
-        if total_affected > 0 {
-            let mut fallback = String::with_capacity(64);
-            fallback.push_str("Result");
-            fallback.push(ROW_SEP);
-            fallback.push_str(&format!("{} rows affected", total_affected));
-            return Ok((String::new(), 0, fallback, elapsed, false));
-        }
-        return Ok((String::new(), 0, String::new(), elapsed, false));
+    if !accum.has_rowset() {
+        let fallback = if total_affected > 0 {
+            format!("Result{ROW_SEP}{total_affected} rows affected")
+        } else {
+            String::new()
+        };
+        return Ok((String::new(), 0, fallback, elapsed, false));
     }
-
-    let columns_packed = pack_columns(&result.columns);
-    let first_page_packed = result.pages.first().cloned().unwrap_or_default();
-    let total_rows = result.total_rows;
-
-    {
-        let mut c = cache.lock().await;
-        c.insert(
-            query_id.to_string(),
-            CachedQuery {
-                pages: result.pages,
-                page_size,
-            },
-        );
-    }
-
+    let columns_packed = pack_columns(&accum.columns);
+    let first_page_packed = accum
+        .pages
+        .first()
+        .map(|page| page.data.clone())
+        .unwrap_or_default();
+    let total_rows = accum.total_rows;
+    let old = cache.lock().await.entries.insert(
+        query_id.to_string(),
+        CachedQuery {
+            pages: accum.pages,
+            page_size,
+            accessed: Instant::now(),
+        },
+    );
+    drop(old);
     Ok((
         columns_packed,
         total_rows,
@@ -152,7 +140,6 @@ pub async fn execute_virtual(
     ))
 }
 
-/// Fetch a cached page without repacking its rows.
 pub async fn fetch_virtual_page(
     cache: &tokio::sync::Mutex<VirtualCache>,
     query_id: &str,
@@ -160,22 +147,25 @@ pub async fn fetch_virtual_page(
     offset: usize,
     _limit: usize,
 ) -> Result<String, AppError> {
-    let c = cache.lock().await;
-    let entry = c
-        .get(query_id)
-        .ok_or_else(|| AppError::QueryFailed(format!("Virtual query {} not found", query_id)))?;
-
-    let page_index = offset / entry.page_size;
-    Ok(entry.pages.get(page_index).cloned().unwrap_or_default())
+    let page = {
+        let mut cache = cache.lock().await;
+        let entry = cache.entries.get_mut(query_id).ok_or_else(|| {
+            AppError::QueryFailed(
+                "This result has expired. Run the query again to reload it.".into(),
+            )
+        })?;
+        entry.accessed = Instant::now();
+        entry.pages.get(offset / entry.page_size).cloned()
+    };
+    Ok(page.map(|page| page.data.clone()).unwrap_or_default())
 }
 
-/// Remove a query and release its cached pages.
 pub async fn close_virtual(
     cache: &tokio::sync::Mutex<VirtualCache>,
     query_id: &str,
 ) -> Result<(), AppError> {
-    let mut c = cache.lock().await;
-    c.remove(query_id);
+    let removed = cache.lock().await.entries.remove(query_id);
+    drop(removed);
     Ok(())
 }
 
@@ -185,28 +175,14 @@ mod tests {
     use super::*;
 
     fn accumulate(rows: &[Vec<Option<&str>>], page_size: usize) -> PageAccumulator {
-        let mut accum = PageAccumulator {
-            columns: vec!["a".to_string()],
-            ..Default::default()
-        };
+        let cache = VirtualCache::new();
+        let mut accum = PageAccumulator::new(Arc::clone(&cache.budget));
+        accum.columns = vec!["a".into()];
         for row in rows {
-            if accum.rows_in_page == page_size {
-                accum.packed_bytes += accum.current.len();
-                accum.pages.push(std::mem::take(&mut accum.current));
-                accum.rows_in_page = 0;
-            }
-            if accum.rows_in_page > 0 {
-                accum.current.push(ROW_SEP);
-            }
-            let cells = row
-                .iter()
-                .map(|c| c.map(str::to_string))
-                .collect::<Vec<_>>();
-            push_row(&mut accum.current, &cells);
-            accum.rows_in_page += 1;
-            accum.total_rows += 1;
+            assert!(accum.push(row.iter().copied(), page_size, &cache.budget));
         }
-        accum.finish()
+        accum.flush(&cache.budget);
+        accum
     }
 
     #[test]
@@ -222,7 +198,7 @@ mod tests {
         let rows = (0..3).map(|_| vec![Some("x")]).collect::<Vec<_>>();
         let accum = accumulate(&rows, 2);
         assert_eq!(accum.pages.len(), 2);
-        assert_eq!(accum.pages[1].split(ROW_SEP).count(), 1);
+        assert_eq!(accum.pages[1].data.split(ROW_SEP).count(), 1);
     }
 
     #[test]
@@ -235,7 +211,7 @@ mod tests {
     #[test]
     fn nulls_survive_page_packing() {
         let accum = accumulate(&[vec![None], vec![Some("null")]], 10);
-        let page = &accum.pages[0];
+        let page = &accum.pages[0].data;
         let mut rows = page.split(ROW_SEP);
         assert_eq!(rows.next().unwrap(), "\u{1D}N");
         assert_eq!(rows.next().unwrap(), "null");
@@ -244,12 +220,12 @@ mod tests {
     #[test]
     fn separators_in_data_do_not_break_page_boundaries() {
         let accum = accumulate(&[vec![Some("a\u{1E}b")], vec![Some("c")]], 10);
-        assert_eq!(accum.pages[0].split(ROW_SEP).count(), 2);
-        assert_eq!(accum.pages[0].split(CELL_SEP).count(), 1);
+        assert_eq!(accum.pages[0].data.split(ROW_SEP).count(), 2);
+        assert_eq!(accum.pages[0].data.split(CELL_SEP).count(), 1);
     }
 
     #[test]
     fn an_empty_accumulator_has_no_rowset() {
-        assert!(!PageAccumulator::default().has_rowset());
+        assert!(!PageAccumulator::new(VirtualCache::new().budget).has_rowset());
     }
 }

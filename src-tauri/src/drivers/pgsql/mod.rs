@@ -10,6 +10,7 @@ pub mod metadata_schema;
 pub mod metadata_views_functions;
 pub mod mutation;
 pub mod query_execution;
+pub(crate) mod result_memory;
 pub mod roles_schema_objects;
 pub mod schema_index;
 pub mod statistics_activity;
@@ -38,14 +39,7 @@ pub fn get_pool(
 
 pub(crate) use wire::ROW_SEP;
 
-/// A cached query: pre-packed page strings for zero-copy serving.
-/// Each page is a single large String (~1-2 MB) so the OS reclaims RSS on drop.
-pub struct CachedQuery {
-    pub(crate) pages: Vec<String>,
-    pub(crate) page_size: usize,
-}
-
-pub type VirtualCache = std::collections::BTreeMap<String, CachedQuery>;
+pub use result_memory::VirtualCache;
 
 /// Column detail info: (name, data_type, nullable, default_value)
 pub type ColumnDetail = (String, String, bool, Option<String>);

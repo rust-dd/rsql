@@ -24,6 +24,19 @@ const TAG_ESC: char = 'C';
 /// A single cell: `None` is SQL NULL, `Some("")` is the empty string.
 pub type Cell = Option<String>;
 
+pub(crate) fn packed_cell_len(cell: Option<&str>) -> usize {
+    match cell {
+        None | Some("") => 2,
+        Some(value) => {
+            value.len()
+                + value
+                    .bytes()
+                    .filter(|byte| matches!(byte, 0x1D..=0x1F))
+                    .count()
+        }
+    }
+}
+
 /// Append one cell in escaped form. `None` becomes the NULL marker.
 pub(crate) fn push_cell(out: &mut String, cell: Option<&str>) {
     let Some(value) = cell else {

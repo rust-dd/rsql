@@ -186,3 +186,50 @@ async fn empty_cursor_fetch_retains_columns() {
     assert!(rows.is_empty());
     client.batch_execute("ROLLBACK").await.unwrap();
 }
+
+#[tokio::test]
+#[ignore = "requires RSQL_TEST_DATABASE_URL"]
+async fn concurrent_results_share_the_budget_and_closing_releases_it() {
+    let first = connect().await;
+    let second = connect().await;
+    let cache = Mutex::new(VirtualCache::with_budget(128));
+    let sql = "SELECT repeat('x', 80) AS value FROM generate_series(1, 20)";
+    let (a, b) = tokio::join!(
+        execute_virtual(&first, &cache, sql, "a", 2),
+        execute_virtual(&second, &cache, sql, "b", 2),
+    );
+    let a = a.unwrap();
+    let b = b.unwrap();
+    assert!(a.4 && b.4);
+    assert_eq!(a.1 + b.1, 1);
+    assert!(cache.lock().await.budget.used() <= 128);
+    close_virtual(&cache, "a").await.unwrap();
+    close_virtual(&cache, "b").await.unwrap();
+    assert_eq!(cache.lock().await.budget.used(), 0);
+}
+
+#[tokio::test]
+#[ignore = "requires RSQL_TEST_DATABASE_URL"]
+async fn oversized_rows_and_query_errors_cannot_leave_reserved_memory() {
+    let client = connect().await;
+    let cache = Mutex::new(VirtualCache::with_budget(128));
+    let result = execute_virtual(
+        &client,
+        &cache,
+        "SELECT repeat(chr(29), 100) AS huge",
+        "huge",
+        2,
+    )
+    .await
+    .unwrap();
+    assert_eq!(result.0, "huge");
+    assert_eq!(result.1, 0);
+    assert!(result.4);
+    assert_eq!(cache.lock().await.budget.used(), 0);
+    assert!(
+        execute_virtual(&client, &cache, "SELECT 'value'; SELECT 1/0", "error", 2)
+            .await
+            .is_err()
+    );
+    assert_eq!(cache.lock().await.budget.used(), 0);
+}

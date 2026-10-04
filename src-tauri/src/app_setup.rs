@@ -108,11 +108,19 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
             client_ssl: Arc::new(Mutex::new(BTreeMap::new())),
             local_db: db,
             resource_monitor: Arc::new(Mutex::new(utils::ResourceMonitor::new())),
-            virtual_cache: Arc::new(Mutex::new(BTreeMap::new())),
+            virtual_cache: Arc::new(Mutex::new(crate::drivers::pgsql::VirtualCache::new())),
             notify_handles: Arc::new(Mutex::new(BTreeMap::new())),
             ssh_tunnels: Arc::new(Mutex::new(BTreeMap::new())),
             ssh_host_keys: Arc::new(crate::ssh::host_keys::HostKeyApprovals::default()),
         };
+        let cache = Arc::clone(&state.virtual_cache);
+        tokio::spawn(async move {
+            let mut timer = tokio::time::interval(std::time::Duration::from_secs(60));
+            loop {
+                timer.tick().await;
+                crate::drivers::pgsql::result_memory::evict_idle(&cache).await;
+            }
+        });
         app_handle.manage(state);
 
         let terminal_state = terminal::TerminalState {
