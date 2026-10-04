@@ -91,16 +91,14 @@ pub async fn execute_virtual(
                 accum = PageAccumulator::new(Arc::clone(&budget));
                 accum.columns = column_names(&columns);
             }
-            SimpleQueryMessage::Row(row) => {
-                if !accum.push((0..row.len()).map(|i| row.get(i)), page_size, &budget) {
-                    capped = true;
-                    break;
-                }
+            SimpleQueryMessage::Row(row)
+                if !accum.push((0..row.len()).map(|i| row.get(i)), page_size, &budget) =>
+            {
+                capped = true;
+                break;
             }
-            SimpleQueryMessage::CommandComplete(n) => {
-                if !accum.has_rowset() {
-                    total_affected += n;
-                }
+            SimpleQueryMessage::CommandComplete(n) if !accum.has_rowset() => {
+                total_affected += n;
             }
             _ => {}
         }
