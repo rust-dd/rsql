@@ -1,5 +1,10 @@
 use crate::common::enums::{AppError, error_chain, query_failed};
 use crate::drivers::pgsql::mutation::quote_ident;
+use futures_util::{SinkExt, pin_mut};
+
+#[cfg(test)]
+#[path = "csv_import_tests.rs"]
+mod integration_tests;
 
 pub async fn parse_csv_preview(
     file_path: &str,
@@ -106,6 +111,27 @@ pub async fn import_csv_to_table(
         .map_err(|e| AppError::QueryFailed(format!("Failed to read CSV: {}", e)))?;
 
     let columns = column_types(client, schema, table, column_mapping).await?;
+    let names = columns
+        .iter()
+        .map(|(name, _)| name.as_str())
+        .collect::<Vec<_>>();
+    let can_copy = client
+        .query_one(
+            "SELECT NOT row_security_active(c.oid)
+                    AND c.relkind IN ('r', 'p') AND NOT c.relhasrules
+                    AND NOT EXISTS (
+                        SELECT 1 FROM pg_attribute a WHERE a.attrelid = c.oid
+                          AND a.attidentity = 'a' AND a.attname = ANY($3::text[])
+                    )
+             FROM pg_class c WHERE c.oid = format('%I.%I', $1::text, $2::text)::regclass",
+            &[&schema, &table, &names],
+        )
+        .await
+        .map_err(query_failed)?
+        .get::<_, bool>(0);
+    if can_copy {
+        return import_copy(client, &mut rdr, schema, table, &columns, column_mapping).await;
+    }
     let insert_sql = build_insert(schema, table, &columns);
 
     // A real transaction rather than a bare BEGIN: a parse error midway used to
@@ -153,6 +179,84 @@ pub async fn import_csv_to_table(
         .await
         .map_err(|e| AppError::QueryFailed(format!("Failed to commit: {}", error_chain(&e))))?;
 
+    Ok(imported)
+}
+
+fn copy_error(error: tokio_postgres::Error) -> AppError {
+    let context = error
+        .as_db_error()
+        .and_then(|error| error.where_())
+        .unwrap_or_default();
+    AppError::QueryFailed(format!(
+        "CSV import failed: {}. {}",
+        error_chain(&error),
+        context
+    ))
+}
+
+async fn import_copy(
+    client: &mut deadpool_postgres::Client,
+    reader: &mut csv::Reader<std::fs::File>,
+    schema: &str,
+    table: &str,
+    columns: &[(String, String)],
+    mapping: &[(usize, String)],
+) -> Result<usize, AppError> {
+    let sql = format!(
+        "COPY {}.{} ({}) FROM STDIN WITH (FORMAT text)",
+        quote_ident(schema),
+        quote_ident(table),
+        columns
+            .iter()
+            .map(|(column, _)| quote_ident(column))
+            .collect::<Vec<_>>()
+            .join(", ")
+    );
+    let tx = client.transaction().await.map_err(query_failed)?;
+    let sink = tx.copy_in(&sql).await.map_err(copy_error)?;
+    pin_mut!(sink);
+    let mut buffer = String::with_capacity(64 * 1024);
+    let mut imported = 0usize;
+    for record in reader.records() {
+        let record = record.map_err(|error| {
+            AppError::QueryFailed(format!("CSV parse error at row {}: {error}", imported + 1))
+        })?;
+        for (column, (index, _)) in mapping.iter().enumerate() {
+            if column > 0 {
+                buffer.push('\t');
+            }
+            match record.get(*index) {
+                None | Some("") => buffer.push_str("\\N"),
+                Some(value) => {
+                    for char in value.chars() {
+                        match char {
+                            '\\' => buffer.push_str("\\\\"),
+                            '\n' => buffer.push_str("\\n"),
+                            '\r' => buffer.push_str("\\r"),
+                            '\t' => buffer.push_str("\\t"),
+                            other => buffer.push(other),
+                        }
+                    }
+                }
+            }
+        }
+        buffer.push('\n');
+        imported += 1;
+        if buffer.len() >= 64 * 1024 {
+            sink.send(std::io::Cursor::new(
+                std::mem::take(&mut buffer).into_bytes(),
+            ))
+            .await
+            .map_err(copy_error)?;
+        }
+    }
+    if !buffer.is_empty() {
+        sink.send(std::io::Cursor::new(buffer.into_bytes()))
+            .await
+            .map_err(copy_error)?;
+    }
+    sink.as_mut().finish().await.map_err(copy_error)?;
+    tx.commit().await.map_err(query_failed)?;
     Ok(imported)
 }
 

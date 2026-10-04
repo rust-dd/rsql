@@ -50,8 +50,12 @@ function escapeXML(cell: CellValue): string {
 
 export function toCSV(columns: string[], rows: CellValue[][]): string {
   const header = columns.map(escapeCSVText).join(",");
-  const body = rows.map((r) => r.map(escapeCSV).join(",")).join("\n");
+  const body = csvRows(rows);
   return `${header}\n${body}`;
+}
+
+export function csvRows(rows: CellValue[][]): string {
+  return rows.map((row) => row.map(escapeCSV).join(",")).join("\n");
 }
 
 /** SQL NULL is exported as JSON null rather than the string "null". */

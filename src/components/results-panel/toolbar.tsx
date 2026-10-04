@@ -17,6 +17,7 @@ import { useUIStore } from "@/stores/ui-store";
 import { ToolbarEdit } from "./toolbar-edit";
 import { ToolbarExport } from "./toolbar-export";
 import type { ToolbarProps } from "./types";
+import { VirtualCsvExport } from "./virtual-csv-export";
 
 export function ResultsToolbar(props: ToolbarProps) {
   const {
@@ -274,6 +275,14 @@ export function ResultsToolbar(props: ToolbarProps) {
             )}
 
             {/* Export dropdown */}
+            {panelView !== "history" && result && virtualQuery && virtualQuery.totalRows > 0 && (
+              <VirtualCsvExport
+                key={virtualQuery.queryId}
+                query={virtualQuery}
+                columns={columns}
+                capped={!!result.capped}
+              />
+            )}
             {panelView !== "history" && result && result.rows.length > 0 && !virtualQuery && (
               <ToolbarExport columns={columns} filteredRows={filteredRows} hasResult={!!result} />
             )}
