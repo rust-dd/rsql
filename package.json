@@ -27,7 +27,7 @@
     "@tauri-apps/plugin-dialog": "^2.8.1",
     "@tauri-apps/plugin-fs": "^2.6.0",
     "@tauri-apps/plugin-process": "^2.4.0",
-    "@tauri-apps/plugin-updater": "^2.13.1",
+    "@tauri-apps/plugin-updater": "^2.14.1",
     "@xterm/addon-fit": "^0.11.0",
     "@xterm/xterm": "^6.0.0",
     "class-variance-authority": "^0.7.1",
@@ -60,11 +60,13 @@
     "tailwindcss": "^4.1.13",
     "tw-animate-css": "^1.3.3",
     "typescript": "~5.8.3",
-    "vite": "^7.3.6",
-    "vitest": "^4.1.11"
+    "vite": "^7.3.7",
+    "vitest": "^4.1.12"
   },
   "resolutions": {
-    "dompurify": "^3.4.16",
-    "vite": "7.3.6"
+    "**/@linaria/react/minimatch": "11.0.1",
+    "**/@linaria/utils/minimatch": "11.0.1",
+    "dompurify": "^3.4.17",
+    "vite": "7.3.7"
   }
 }
