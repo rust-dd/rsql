@@ -52,8 +52,10 @@ jobs:
         include:
           - platform: macos-latest
             args: --target aarch64-apple-darwin
+            target: aarch64-apple-darwin
           - platform: macos-latest
             args: --target x86_64-apple-darwin
+            target: x86_64-apple-darwin
           - platform: ubuntu-22.04
             args: ""
           - platform: windows-latest
@@ -207,6 +209,51 @@ jobs:
           chmod 700 "$HOME/.gnupg"
           printf '%s' "${TAURI_SIGNING_RPM_KEY}" | gpg --batch --import
 
+      - name: Configure macOS signing and notarization
+        if: matrix.platform == 'macos-latest'
+        shell: bash
+        env:
+          MACOS_SIGNING_ENABLED: ${{ vars.MACOS_SIGNING_ENABLED }}
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          case "$MACOS_SIGNING_ENABLED" in
+            true) ;;
+            ''|false)
+              echo "::warning::macOS signing is disabled. This build requires a Gatekeeper override. See docs/macos-release.md."
+              exit 0
+              ;;
+            *)
+              echo "::error::MACOS_SIGNING_ENABLED must be true or false."
+              exit 1
+              ;;
+          esac
+
+          required=(APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID)
+          for name in "${required[@]}"; do
+            if [ -z "${!name}" ]; then
+              echo "::error::Missing $name secret. See docs/macos-release.md."
+              exit 1
+            fi
+            if [[ "${!name}" == *$'\n'* || "${!name}" == *$'\r'* ]]; then
+              echo "::error::$name must be a single line. Encode the certificate with openssl base64 -A."
+              exit 1
+            fi
+          done
+
+          if [[ "$APPLE_SIGNING_IDENTITY" != 'Developer ID Application: '* ]]; then
+            echo "::error::APPLE_SIGNING_IDENTITY must identify a Developer ID Application certificate."
+            exit 1
+          fi
+
+          for name in "${required[@]}"; do
+            printf '%s=%s\n' "$name" "${!name}" >> "$GITHUB_ENV"
+          done
+
       - uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -229,3 +276,49 @@ jobs:
           prerelease: ${{ contains(steps.release_meta.outputs.tag, '-rc') }}
           args: ${{ matrix.args }} -- --locked
           tauriScript: npx tauri
+
+      - name: Verify macOS signature and notarization ticket
+        if: matrix.platform == 'macos-latest' && vars.MACOS_SIGNING_ENABLED == 'true'
+        shell: bash
+        env:
+          APP_BUNDLE: src-tauri/target/${{ matrix.target }}/release/bundle/macos/rsql.app
+        run: |
+          codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+          spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
+          xcrun stapler validate "$APP_BUNDLE"
+
+      - name: Notarize, verify and replace the macOS disk image
+        if: matrix.platform == 'macos-latest' && vars.MACOS_SIGNING_ENABLED == 'true'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          DMG_DIRECTORY: src-tauri/target/${{ matrix.target }}/release/bundle/dmg
+        run: |
+          shopt -s nullglob
+          disk_images=("$DMG_DIRECTORY"/*.dmg)
+          if [ "${#disk_images[@]}" -eq 0 ]; then
+            echo "::error::No macOS disk image was produced."
+            exit 1
+          fi
+
+          for disk_image in "${disk_images[@]}"; do
+            report=$(mktemp "$RUNNER_TEMP/rsql-notarization.XXXXXX")
+            xcrun notarytool submit "$disk_image" \
+              --apple-id "$APPLE_ID" \
+              --password "$APPLE_PASSWORD" \
+              --team-id "$APPLE_TEAM_ID" \
+              --wait --timeout 30m --output-format json > "$report"
+            cat "$report"
+            if ! jq -e '.status == "Accepted"' "$report" > /dev/null; then
+              echo "::error::Apple did not accept the disk image for notarization."
+              exit 1
+            fi
+
+            xcrun stapler staple "$disk_image"
+            xcrun stapler validate "$disk_image"
+            codesign --verify --strict --verbose=2 "$disk_image"
+            spctl --assess --type open --context context:primary-signature --verbose=4 "$disk_image"
+          done
+
+          # tauri-action uploaded the DMG before its ticket was attached.
+          gh release upload "$RELEASE_TAG" "${disk_images[@]}" --clobber
