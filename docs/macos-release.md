@@ -7,7 +7,7 @@ RSQL can keep distributing DMGs through GitHub Releases. Sign the app with a **D
 - The release workflow already builds Apple Silicon and Intel macOS installers separately.
 - `src-tauri/tauri.conf.json` already enables the hardened runtime and uses the stable bundle identifier `com.rust-dd.rsql`.
 - Updater signatures are configured, but they authenticate updates to RSQL itself; they do not establish trust with Gatekeeper.
-- The repository secret names inspected during this setup contained no Apple signing credentials. The local keychain query returned no valid code-signing identities. No signed release has been built or notarized as part of this change.
+- The Developer ID Application certificate and private key for Gympiper are configured in the repository's signing secrets. Notarization credentials must also be present before enabling signing. A signed release still needs to pass the checks below before publication.
 - `.github/workflows/release.yml` now supports signing and notarization when the repository variable `MACOS_SIGNING_ENABLED` is `true`. Until then, macOS builds remain unsigned and emit a workflow warning. Enabled signing fails on missing credentials instead of falling back to an unsigned release.
 
 ## One-time Apple setup
@@ -33,7 +33,7 @@ Tauri notarizes the `.app`, but its DMG bundler only signs the outer disk image.
 
 ## GitHub configuration
 
-In [repository Actions settings](https://github.com/rust-dd/rust-sql/settings/secrets/actions), add these repository secrets:
+In [repository Actions settings](https://github.com/rust-dd/rsql/settings/secrets/actions), add these repository secrets:
 
 | Secret | Value |
 | --- | --- |

@@ -1,6 +1,6 @@
 # Application icon
 
-`app-icon.png` is the transparent master for the desktop application icon: a lavender database stack with a query chevron on an ink-violet tile.
+`app-icon.png` is the transparent master for the desktop application icon: a rust-orange gear around an ivory R and database stack on a charcoal tile.
 
 From the repository root, run:
 
