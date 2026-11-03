@@ -14,13 +14,7 @@ Download the installer for your platform from the [latest release](https://githu
 
 The app checks for updates on startup. You can also check with the Updates button.
 
-macOS builds are not signed yet. After copying the app to Applications, remove the quarantine flag:
-
-```bash
-xattr -dr com.apple.quarantine /Applications/rsql.app
-```
-
-Developer ID signing and Apple notarization can be enabled for future releases; see the [macOS release setup](docs/macos-release.md). The command above applies only to unsigned builds.
+The latest macOS installers are signed with Developer ID and notarized by Apple. Open the DMG, drag RSQL into Applications and launch it normally. macOS may show its standard first-launch confirmation for a downloaded app; no quarantine command or security override is needed. See the [macOS release setup](docs/macos-release.md) for signing and verification details.
 
 ## Features
 

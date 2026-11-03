@@ -7,8 +7,8 @@ RSQL can keep distributing DMGs through GitHub Releases. Sign the app with a **D
 - The release workflow already builds Apple Silicon and Intel macOS installers separately.
 - `src-tauri/tauri.conf.json` already enables the hardened runtime and uses the stable bundle identifier `com.rust-dd.rsql`.
 - Updater signatures are configured, but they authenticate updates to RSQL itself; they do not establish trust with Gatekeeper.
-- The Developer ID Application certificate and private key for Gympiper are configured in the repository's signing secrets. Notarization credentials must also be present before enabling signing. A signed release still needs to pass the checks below before publication.
-- `.github/workflows/release.yml` now supports signing and notarization when the repository variable `MACOS_SIGNING_ENABLED` is `true`. Until then, macOS builds remain unsigned and emit a workflow warning. Enabled signing fails on missing credentials instead of falling back to an unsigned release.
+- The Developer ID Application certificate and private key for Gympiper and the notarization credentials are configured in the repository's signing secrets.
+- The repository variable `MACOS_SIGNING_ENABLED` is `true`. The release workflow signs and notarizes both macOS architectures and fails on missing credentials instead of falling back to an unsigned release. Setting the variable to `false` produces unsigned builds and emits a workflow warning.
 
 ## One-time Apple setup
 
@@ -46,13 +46,13 @@ In [repository Actions settings](https://github.com/rust-dd/rsql/settings/secret
 
 Then add the **repository variable** `MACOS_SIGNING_ENABLED` with the value `true`. The signing identity and Team ID must refer to the same team. Existing Tauri updater secrets are still required. Keep certificate contents and passwords out of source files, release descriptions and chat.
 
-## First signed release
+## Release verification
 
-1. Merge the icon and workflow changes, then update the version consistently as for any other release.
+1. Merge the release changes and update the version consistently.
 2. Push the new `v*` tag. A manual workflow dispatch must target a tag containing the updated workflow; rebuilding an old tag does not automatically use these changes.
 3. Wait for both macOS jobs to finish. The workflow checks the app signature, Gatekeeper assessment and stapled ticket, then notarizes and verifies the DMG and replaces its draft asset. The initial upload precedes that final replacement, so do not publish the **draft** while jobs are running or if any job fails.
 4. Download the DMG with a browser on a clean Mac or VM. Copy RSQL to Applications and open it normally, without clearing quarantine. Check the icon, a database connection, the SQL editor, the terminal and the updater. Cover Apple Silicon and Intel separately.
-5. Publish the draft after verification. Record that this is the first signed and notarized release and update the README installation instructions. Older unsigned downloads do not become trusted retroactively.
+5. Publish the draft after verification. Only distribute installers whose signing and notarization checks passed. Older unsigned downloads do not become trusted retroactively.
 
 For a downloaded and installed app, these checks should succeed:
 
