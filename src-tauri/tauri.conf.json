@@ -27,6 +27,16 @@
     "active": true,
     "targets": "all",
     "createUpdaterArtifacts": true,
+    "linux": {
+      "deb": {
+        "files": {
+          "/usr/share/applications/rsql.desktop": "linux/rsql.desktop"
+        }
+      },
+      "rpm": {
+        "desktopTemplate": "linux/rsql.desktop"
+      }
+    },
     "macOS": {
       "hardenedRuntime": true
     },
