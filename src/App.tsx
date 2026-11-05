@@ -243,6 +243,7 @@ export default function App() {
                       className="flex flex-col overflow-hidden"
                     >
                       <QueryEditor
+                        tabId={activeTab.id}
                         value={activeTab.editorValue}
                         onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                         onExecute={() => void runQuery()}
@@ -274,6 +275,8 @@ export default function App() {
                       className="flex flex-col overflow-hidden"
                     >
                       <QueryEditor
+                        tabId={activeTab.id}
+                        slot="split"
                         value={activeTab.splitEditorValue ?? ""}
                         onChange={(v) =>
                           activeTabId && useTabStore.getState().updateSplitContent(activeTabId, v)
@@ -329,6 +332,7 @@ export default function App() {
                   className="flex flex-col overflow-hidden"
                 >
                   <QueryEditor
+                    tabId={activeTab.id}
                     value={activeTab?.editorValue ?? ""}
                     onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                     onExecute={() => void runQuery()}

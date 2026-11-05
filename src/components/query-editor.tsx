@@ -1,21 +1,40 @@
-import Editor from "@monaco-editor/react";
+import Editor, { useMonaco } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
-import { useCallback, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { trackTabEditor } from "@/lib/tab-resources";
 import { useUIStore } from "@/stores/ui-store";
 
 interface QueryEditorProps {
+  tabId: string;
+  slot?: "main" | "split";
   value: string;
   onChange: (value: string) => void;
   onExecute: () => void;
   onExplain?: () => void;
 }
 
-export function QueryEditor({ value, onChange, onExecute, onExplain }: QueryEditorProps) {
+export function QueryEditor({
+  tabId,
+  slot = "main",
+  value,
+  onChange,
+  onExecute,
+  onExplain,
+}: QueryEditorProps) {
+  const monaco = useMonaco();
+  const modelPath = `rsql://query/${encodeURIComponent(tabId)}/${slot}.sql`;
   const theme = useUIStore((s) => s.theme);
   const onExecuteRef = useRef(onExecute);
   onExecuteRef.current = onExecute;
   const onExplainRef = useRef(onExplain);
   onExplainRef.current = onExplain;
+
+  useEffect(() => {
+    if (!monaco) return;
+    trackTabEditor(tabId, slot, () =>
+      monaco.editor.getModel(monaco.Uri.parse(modelPath))?.dispose(),
+    );
+  }, [monaco, tabId, slot, modelPath]);
 
   const handleMount = useCallback(
     (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
@@ -42,6 +61,8 @@ export function QueryEditor({ value, onChange, onExecute, onExplain }: QueryEdit
     >
       <div className="absolute inset-0 overflow-auto bg-editor-bg">
         <Editor
+          path={modelPath}
+          keepCurrentModel
           height="100%"
           defaultLanguage="pgsql"
           language="pgsql"
