@@ -1,0 +1,8 @@
+[Desktop Entry]
+Name=rsql
+Comment=Modern SQL Client
+Exec=/usr/bin/rsql
+StartupWMClass=rsql
+Icon=rsql
+Terminal=false
+Type=Application
