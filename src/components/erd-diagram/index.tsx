@@ -74,7 +74,8 @@ export function ERDDiagram({ projectId, schema }: ERDProps) {
       }
 
       if (cancelled) return;
-      setFks(loadedFks);
+      // Boxes are matched by bare table name, so a key into another schema would hit the wrong box.
+      setFks(loadedFks.filter((fk) => fk.targetSchema === schema));
 
       const currentTables = useProjectStore.getState().tables[`${projectId}::${schema}`] ?? [];
       if (currentTables.length === 0) {

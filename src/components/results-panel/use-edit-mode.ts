@@ -1,8 +1,8 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
-import type { ForeignKey } from "@/lib/database-driver";
+import { useCallback, useMemo, useState } from "react";
+import { parseCellInput } from "@/lib/cell-input";
 import { DriverFactory } from "@/lib/database-driver";
 import { buildMutations, countPending, emptySession, rowKeys } from "@/lib/mutations";
-import { parseSelectTable, quoteIdent, quoteLiteral } from "@/lib/sql-utils";
+import { parseSelectTable } from "@/lib/sql-utils";
 import type { CellValue } from "@/lib/wire";
 import { useProjectStore } from "@/stores/project-store";
 import { useTabStore } from "@/stores/tab-store";
@@ -47,66 +47,6 @@ export function useEditMode({ tabId, projectId, editorValue, result }: UseEditMo
   const pending = useMemo(
     () => (editSession ? countPending(editSession) : { updates: 0, deletes: 0 }),
     [editSession],
-  );
-
-  const [fkMap, setFkMap] = useState<
-    Map<string, { schema: string; table: string; column: string }>
-  >(new Map());
-
-  useEffect(() => {
-    if (!editableTable || !projectId) {
-      setFkMap(new Map());
-      return;
-    }
-    const pid = projectId;
-    const d = useProjectStore.getState().projects[pid];
-    if (!d) return;
-
-    const driver = DriverFactory.getDriver(d.driver);
-    driver
-      .loadForeignKeys(pid, editableTable.schema)
-      .then((fks: ForeignKey[]) => {
-        const map = new Map<string, { schema: string; table: string; column: string }>();
-        for (const fk of fks) {
-          if (fk.sourceTable === editableTable.table) {
-            map.set(fk.sourceColumn, {
-              schema: editableTable.schema,
-              table: fk.targetTable,
-              column: fk.targetColumn,
-            });
-          }
-        }
-        setFkMap(map);
-      })
-      .catch(() => setFkMap(new Map()));
-  }, [editableTable, projectId]);
-
-  const handleFKNavigate = useCallback(
-    (colName: string, value: string) => {
-      const target = fkMap.get(colName);
-      if (!target || !projectId) return;
-
-      const pid = projectId;
-      const sql = `SELECT * FROM ${quoteIdent(target.schema)}.${quoteIdent(target.table)} WHERE ${quoteIdent(target.column)} = ${quoteLiteral(value)} LIMIT 100`;
-      useTabStore.getState().openTab(pid, sql);
-
-      const d = useProjectStore.getState().projects[pid];
-      if (!d) return;
-      const tabs = useTabStore.getState().tabs;
-      const newTabId = tabs[tabs.length - 1]?.id;
-      if (!newTabId) return;
-      useTabStore.getState().setExecuting(newTabId, true);
-      const driver = DriverFactory.getDriver(d.driver);
-      driver
-        .runQuery(pid, sql)
-        .then(([cols, rows, time]) => {
-          useTabStore.getState().updateResult(newTabId, { columns: cols, rows, time });
-        })
-        .catch(() => {
-          useTabStore.getState().setExecuting(newTabId, false);
-        });
-    },
-    [fkMap, projectId],
   );
 
   const handleEnterEdit = useCallback(async () => {
@@ -216,7 +156,8 @@ export function useEditMode({ tabId, projectId, editorValue, result }: UseEditMo
       if (!column) return;
 
       const original = result.rows[rowIndex]?.[colIndex];
-      const next: CellValue | undefined = value === original ? undefined : value;
+      const parsed = parseCellInput(value);
+      const next: CellValue | undefined = parsed === original ? undefined : parsed;
       useTabStore.getState().setCellEdit(tabId, key, column, next);
     },
     [tabId, editSession, result, keys],
@@ -246,7 +187,7 @@ export function useEditMode({ tabId, projectId, editorValue, result }: UseEditMo
 
   // The grid still works in row positions, so translate identities back to it.
   const editedCells = useMemo(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, CellValue>();
     if (!editSession || !result) return map;
     keys.forEach((key, rowIndex) => {
       if (!key) return;
@@ -254,7 +195,7 @@ export function useEditMode({ tabId, projectId, editorValue, result }: UseEditMo
       if (!columns) return;
       for (const [column, value] of Object.entries(columns)) {
         const colIndex = result.columns.indexOf(column);
-        if (colIndex >= 0) map.set(`${rowIndex}:${colIndex}`, value ?? "");
+        if (colIndex >= 0) map.set(`${rowIndex}:${colIndex}`, value);
       }
     });
     return map;
@@ -280,10 +221,8 @@ export function useEditMode({ tabId, projectId, editorValue, result }: UseEditMo
     pending,
     sessionMatchesEditor,
     editableTable,
-    fkMap,
     editedCells,
     deletedRowIndices,
-    handleFKNavigate,
     handleEnterEdit,
     handleDiscard,
     handleRequestApply,

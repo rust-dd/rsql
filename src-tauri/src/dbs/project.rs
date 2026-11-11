@@ -1,8 +1,34 @@
 use crate::AppState;
 use crate::common::BTreeVecStore;
 use crate::common::enums::AppError;
+use libsql::Connection;
 use std::collections::BTreeMap;
 use tauri::{Result, State};
+
+/// Column order of the details vector exchanged with the frontend, followed by `SERVER_ALIAS`.
+/// `select_projects` appends `legacy_id`, which only the id migration writes.
+const DETAIL_COLUMNS: [&str; 14] = [
+    "driver",
+    "username",
+    "password",
+    "database",
+    "host",
+    "port",
+    "ssl",
+    "ssh_enabled",
+    "ssh_host",
+    "ssh_port",
+    "ssh_user",
+    "ssh_password",
+    "ssh_key_path",
+    "name",
+];
+
+/// Set when a project is created and by `set_server_alias`; editing a connection leaves it alone.
+const SERVER_ALIAS: &str = "server_alias";
+
+#[cfg(test)]
+mod tests;
 
 #[tauri::command(rename_all = "snake_case")]
 pub async fn project_db_select(app_state: State<'_, AppState>) -> Result<BTreeVecStore> {
@@ -10,71 +36,9 @@ pub async fn project_db_select(app_state: State<'_, AppState>) -> Result<BTreeVe
         .local_db
         .connect()
         .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-
-    let mut rows = conn
-        .query(
-            "SELECT id, driver, username, password, database, host, port, ssl, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_password, ssh_key_path FROM projects ORDER BY id",
-            (),
-        )
+    Ok(select_projects(&conn)
         .await
-        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-
-    let mut projects = BTreeMap::new();
-    while let Some(row) = rows
-        .next()
-        .await
-        .map_err(|e| AppError::DatabaseError(e.to_string()))?
-    {
-        let id: String = row
-            .get(0)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let driver: String = row
-            .get(1)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let username: String = row
-            .get(2)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let password: String = row
-            .get(3)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let database: String = row
-            .get(4)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let host: String = row
-            .get(5)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let port: String = row
-            .get(6)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let ssl: String = row
-            .get(7)
-            .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-        let ssh_enabled: String = row.get::<String>(8).unwrap_or_default();
-        let ssh_host: String = row.get::<String>(9).unwrap_or_default();
-        let ssh_port: String = row.get::<String>(10).unwrap_or_default();
-        let ssh_user: String = row.get::<String>(11).unwrap_or_default();
-        let ssh_password: String = row.get::<String>(12).unwrap_or_default();
-        let ssh_key_path: String = row.get::<String>(13).unwrap_or_default();
-        projects.insert(
-            id,
-            vec![
-                driver,
-                username,
-                password,
-                database,
-                host,
-                port,
-                ssl,
-                ssh_enabled,
-                ssh_host,
-                ssh_port,
-                ssh_user,
-                ssh_password,
-                ssh_key_path,
-            ],
-        );
-    }
-    Ok(projects)
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -87,32 +51,98 @@ pub async fn project_db_insert(
         .local_db
         .connect()
         .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    upsert_project(&conn, project_id, &project_details)
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    Ok(())
+}
 
-    let driver = project_details.first().cloned().unwrap_or_default();
-    let username = project_details.get(1).cloned().unwrap_or_default();
-    let password = project_details.get(2).cloned().unwrap_or_default();
-    let database = project_details.get(3).cloned().unwrap_or_default();
-    let host = project_details.get(4).cloned().unwrap_or_default();
-    let port = project_details.get(5).cloned().unwrap_or_default();
-    let ssl = project_details
-        .get(6)
-        .cloned()
-        .unwrap_or("false".to_string());
-    let ssh_enabled = project_details.get(7).cloned().unwrap_or_default();
-    let ssh_host = project_details.get(8).cloned().unwrap_or_default();
-    let ssh_port = project_details.get(9).cloned().unwrap_or_default();
-    let ssh_user = project_details.get(10).cloned().unwrap_or_default();
-    let ssh_password = project_details.get(11).cloned().unwrap_or_default();
-    let ssh_key_path = project_details.get(12).cloned().unwrap_or_default();
+pub(crate) async fn select_projects(conn: &Connection) -> libsql::Result<BTreeVecStore> {
+    let sql = format!(
+        "SELECT id, {}, {SERVER_ALIAS}, legacy_id FROM projects ORDER BY id",
+        DETAIL_COLUMNS.join(", ")
+    );
+    let mut rows = conn.query(&sql, ()).await?;
 
-    conn.execute(
-        "INSERT OR REPLACE INTO projects (id, driver, username, password, database, host, port, ssl, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_password, ssh_key_path)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13, ?14)",
-        libsql::params![project_id, driver, username, password, database, host, port, ssl, ssh_enabled, ssh_host, ssh_port, ssh_user, ssh_password, ssh_key_path],
-    )
-    .await
-    .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    let mut projects = BTreeMap::new();
+    while let Some(row) = rows.next().await? {
+        let id: String = row.get(0)?;
+        let mut details = Vec::with_capacity(DETAIL_COLUMNS.len() + 2);
+        for idx in 1..=DETAIL_COLUMNS.len() as i32 + 2 {
+            details.push(row.get::<String>(idx)?);
+        }
+        projects.insert(id, details);
+    }
+    Ok(projects)
+}
 
+pub(crate) async fn upsert_project(
+    conn: &Connection,
+    project_id: &str,
+    details: &[String],
+) -> libsql::Result<()> {
+    let placeholders: Vec<String> = (1..=DETAIL_COLUMNS.len() + 2)
+        .map(|idx| format!("?{idx}"))
+        .collect();
+    let updates: Vec<String> = DETAIL_COLUMNS
+        .iter()
+        .map(|column| format!("{column} = excluded.{column}"))
+        .collect();
+    let sql = format!(
+        "INSERT INTO projects (id, {}, {SERVER_ALIAS}) VALUES ({}) ON CONFLICT(id) DO UPDATE SET {}",
+        DETAIL_COLUMNS.join(", "),
+        placeholders.join(", "),
+        updates.join(", ")
+    );
+    let mut values = vec![project_id.to_string()];
+    for (idx, column) in DETAIL_COLUMNS.iter().enumerate() {
+        let fallback = if *column == "ssl" { "false" } else { "" };
+        values.push(
+            details
+                .get(idx)
+                .map_or(fallback, String::as_str)
+                .to_string(),
+        );
+    }
+    values.push(
+        details
+            .get(DETAIL_COLUMNS.len())
+            .cloned()
+            .unwrap_or_default(),
+    );
+    conn.execute(&sql, libsql::params_from_iter(values)).await?;
+    Ok(())
+}
+
+pub(crate) async fn set_server_alias(
+    conn: &Connection,
+    project_ids: &[String],
+    alias: &str,
+) -> libsql::Result<()> {
+    let tx = conn.transaction().await?;
+    for id in project_ids {
+        tx.execute(
+            &format!("UPDATE projects SET {SERVER_ALIAS} = ?1 WHERE id = ?2"),
+            [alias, id.as_str()],
+        )
+        .await?;
+    }
+    tx.commit().await
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn project_db_set_server_alias(
+    project_ids: Vec<String>,
+    alias: &str,
+    app_state: State<'_, AppState>,
+) -> Result<()> {
+    let conn = app_state
+        .local_db
+        .connect()
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    set_server_alias(&conn, &project_ids, alias)
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
     Ok(())
 }
 

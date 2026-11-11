@@ -65,8 +65,8 @@ pub type DbStat = (String, String);
 /// Constraint info: (constraint_name, constraint_type, column_name)
 pub type ConstraintDetail = (String, String, String);
 
-/// FK relation: (source_table, source_column, target_table, target_column)
-pub type ForeignKeyInfo = (String, String, String, String);
+/// FK relation: (source_table, source_column, target_schema, target_table, target_column)
+pub type ForeignKeyInfo = (String, String, String, String, String);
 
 /// Table statistics: Vec of (key, value) pairs
 pub type ObjectStats = Vec<(String, String)>;

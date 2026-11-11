@@ -3,6 +3,7 @@ type Cleanup = () => unknown;
 
 const executions = new Map<string, { cancel: () => void }>();
 const results = new Map<string, Cleanup>();
+const editors = new Map<string, Cleanup>();
 
 function safely(cleanup: Cleanup) {
   try {
@@ -48,6 +49,19 @@ export function releaseResult(tabId: string) {
 export function trackResult(tabId: string, cleanup: Cleanup) {
   releaseResult(tabId);
   results.set(tabId, cleanup);
+}
+
+export function trackTabEditor(tabId: string, slot: Slot, cleanup: Cleanup) {
+  editors.set(`${tabId}:${slot}`, cleanup);
+}
+
+export function releaseTabEditors(tabId: string) {
+  for (const slot of ["main", "split"]) {
+    const key = `${tabId}:${slot}`;
+    const cleanup = editors.get(key);
+    editors.delete(key);
+    if (cleanup) safely(cleanup);
+  }
 }
 
 export function releaseTabResources(tabId: string) {

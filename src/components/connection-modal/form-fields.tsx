@@ -57,10 +57,9 @@ export function DriverDisplay({ driver }: DriverDisplayProps) {
 interface NameFieldProps {
   value: string;
   onChange: (value: string) => void;
-  disabled: boolean;
 }
 
-export function NameField({ value, onChange, disabled }: NameFieldProps) {
+export function NameField({ value, onChange }: NameFieldProps) {
   return (
     <div className="space-y-2">
       <Label htmlFor="name" className="font-mono text-xs text-foreground">
@@ -72,7 +71,6 @@ export function NameField({ value, onChange, disabled }: NameFieldProps) {
         onChange={(e) => onChange(e.target.value)}
         placeholder="production-db"
         required
-        disabled={disabled}
         className="bg-input/80 border-border/50 text-foreground font-mono text-sm rounded-lg"
       />
     </div>

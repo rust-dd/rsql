@@ -5,6 +5,7 @@ import {
   type Item,
   type Theme,
 } from "@glideapps/glide-data-grid";
+import { formatCellInput } from "@/lib/cell-input";
 import * as virtualCache from "@/lib/virtual-cache";
 import type { CellValue } from "@/lib/wire";
 import type { VirtualQuery } from "@/types";
@@ -69,7 +70,7 @@ export function computeFkColIndices(
 
 export interface CellContentContext {
   rows: CellValue[][];
-  cellEdits?: Map<string, string>;
+  cellEdits?: Map<string, CellValue>;
   deletedRows?: Set<number>;
   isEditing?: boolean;
   fkColIndices: Set<number>;
@@ -91,6 +92,12 @@ function readonlyCell(raw: CellValue | undefined): GridCell {
     readonly: true,
     themeOverride: isNull ? NULL_OVERRIDE : undefined,
   };
+}
+
+/** Grid pastes carry literal cell data, not the text editor's NULL syntax. */
+export function coercePasteValue(value: string, cell: GridCell): GridCell | undefined {
+  if (cell.kind !== GridCellKind.Text) return undefined;
+  return { ...cell, data: formatCellInput(value) };
 }
 
 export function buildCellContent(cell: Item, ctx: CellContentContext): GridCell {
@@ -124,14 +131,15 @@ export function buildCellContent(cell: Item, ctx: CellContentContext): GridCell 
   const key = `${rowIdx}:${colIdx}`;
   const isModified = cellEdits?.has(key);
   const isDeleted = deletedRows?.has(rowIdx);
-  const raw = isModified ? (cellEdits?.get(key) ?? "") : rows[rowIdx]?.[colIdx];
+  const raw = isModified ? cellEdits?.get(key) : rows[rowIdx]?.[colIdx];
   const isNull = raw === null;
   const value = raw ?? "";
   const isFK = fkColIndices.has(colIdx) && !isEditing && !isNull;
 
   return {
     kind: GridCellKind.Text,
-    data: value,
+    data: isEditing && !isDeleted ? formatCellInput(raw === undefined ? "" : raw) : value,
+    copyData: value,
     displayData: isNull ? NULL_DISPLAY : isFK ? `${value} →` : value,
     allowOverlay: !!isEditing && !isDeleted,
     readonly: !isEditing || !!isDeleted,

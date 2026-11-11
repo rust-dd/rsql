@@ -1,6 +1,6 @@
 import { Database, Download, Moon, Search, Sun } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { useProjectStore } from "@/stores/project-store";
+import { projectName, useProjectStore } from "@/stores/project-store";
 import { tabIdAt, useActiveTab, useTabStore } from "@/stores/tab-store";
 import { useUIStore } from "@/stores/ui-store";
 import { ProjectConnectionStatus } from "@/types";
@@ -35,7 +35,7 @@ export function TopBar({
         status[activeProject] === ProjectConnectionStatus.Connected ? (
           <div className="flex items-center gap-1.5 bg-accent rounded-full px-2.5 py-0.5 text-xs text-muted-foreground">
             <div className="h-2 w-2 rounded-full bg-success shadow-[0_0_6px_oklch(0.65_0.18_150)]" />
-            <span className="font-mono">{activeProject}</span>
+            <span className="font-mono">{projectName(projects, activeProject)}</span>
             <span className="text-muted-foreground/50">&bull;</span>
             <span>
               {activeProjectDetails.host}:{activeProjectDetails.port}
@@ -57,7 +57,7 @@ export function TopBar({
                 <option value="">Select connection...</option>
                 {Object.entries(projects).map(([id, details]) => (
                   <option key={id} value={id}>
-                    {id} ({details.database})
+                    {projectName(projects, id)} ({details.database})
                     {status[id] === ProjectConnectionStatus.Connected ? "" : " \u2022 disconnected"}
                   </option>
                 ))}

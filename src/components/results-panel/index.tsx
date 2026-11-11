@@ -11,6 +11,7 @@ import { EmptyResults, QueryFeedback } from "./feedback";
 import { ResultsToolbar } from "./toolbar";
 import type { PanelView } from "./types";
 import { useEditMode } from "./use-edit-mode";
+import { useFkNavigation } from "./use-fk-navigation";
 import { useVirtualPaging } from "./use-virtual-paging";
 
 const ExplainPanel = lazy(() =>
@@ -93,10 +94,8 @@ function ResultsPanelContent() {
     pending,
     sessionMatchesEditor,
     editableTable,
-    fkMap,
     editedCells,
     deletedRowIndices,
-    handleFKNavigate,
     handleEnterEdit,
     handleDiscard,
     handleRequestApply,
@@ -110,6 +109,11 @@ function ResultsPanelContent() {
     projectId: activeTab?.projectId,
     editorValue: activeTab?.editorValue,
     result,
+  });
+
+  const { fkMap, handleFKNavigate } = useFkNavigation({
+    projectId: activeTab?.projectId,
+    editableTable,
   });
 
   const filteredRows = useMemo(() => {

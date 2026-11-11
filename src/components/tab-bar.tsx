@@ -17,7 +17,7 @@ import {
 import { Button } from "@/components/ui/button";
 import { ContextMenu, useContextMenu } from "@/components/ui/context-menu";
 import { cn } from "@/lib/utils";
-import { useProjectStore } from "@/stores/project-store";
+import { projectName, useProjectStore } from "@/stores/project-store";
 import { useTabStore } from "@/stores/tab-store";
 
 export function TabBar() {
@@ -42,7 +42,7 @@ export function TabBar() {
       <div className="flex flex-1 items-center overflow-x-auto overflow-y-hidden whitespace-nowrap scrollbar-none gap-0.5 px-1.5 py-1">
         {tabs.map((tab, idx) => {
           if (!tab) return null;
-          const projectName = tab.projectId;
+          const connectionName = tab.projectId ? projectName(projects, tab.projectId) : undefined;
           const projectDb = tab.projectId ? projects[tab.projectId]?.database : undefined;
           const isActive = selectedTabIndex === idx;
 
@@ -132,7 +132,7 @@ export function TabBar() {
                   />
                 ) : null}
                 {projectDb && tab.type !== "monitor" && (
-                  <span className="text-muted-foreground/70">{projectName}:</span>
+                  <span className="text-muted-foreground/70">{connectionName}:</span>
                 )}
                 <span className={cn(isActive && "font-medium")}>{tab.title}</span>
               </div>

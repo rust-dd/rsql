@@ -43,6 +43,14 @@ export function ToolbarEdit({
 
   return (
     <>
+      <span
+        className="text-xs text-muted-foreground"
+        title={
+          'Type NULL (any letter case) for SQL NULL, or use double quotes for literal text, e.g. "NULL". An empty cell is an empty string.'
+        }
+      >
+        NULL = SQL NULL · &quot;NULL&quot; = text
+      </span>
       {editError && (
         <span className="text-xs text-destructive max-w-[240px] truncate" title={editError}>
           {editError}

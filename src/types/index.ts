@@ -4,6 +4,8 @@ import type { CellValue } from "@/lib/wire";
 export type { CellValue, EditSession };
 
 export interface ProjectDetails {
+  name: string;
+  serverAlias: string;
   driver: DriverType;
   username: string;
   password: string;

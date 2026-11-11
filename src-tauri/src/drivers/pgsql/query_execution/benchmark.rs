@@ -22,7 +22,7 @@ async fn benchmark_retained_results_and_cleanup() {
         .unwrap();
     tokio::spawn(async move { connection.await.unwrap() });
     let cache = Mutex::new(VirtualCache::new());
-    let mut system = System::new();
+    let mut system = System::new().unwrap();
     println!(
         "Backend process RSS before queries: {} bytes",
         rss(&mut system)

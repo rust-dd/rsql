@@ -15,6 +15,7 @@ import {
 } from "lucide-react";
 import { DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { cn } from "@/lib/utils";
+import { projectName, useProjectStore } from "@/stores/project-store";
 import type { ObjectType, Tab } from "./types";
 
 const objectIcon: Record<ObjectType, React.ReactNode> = {
@@ -74,6 +75,7 @@ export function ModalHeader({
   activeTab: Tab;
   setActiveTab: (tab: Tab) => void;
 }) {
+  const connectionName = useProjectStore((s) => projectName(s.projects, projectId));
   return (
     <div className={cn("relative px-5 pt-5 pb-3 bg-gradient-to-b", typeColor[objectType])}>
       <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,rgba(255,255,255,0.03),transparent_70%)]" />
@@ -104,7 +106,9 @@ export function ModalHeader({
               </span>
               <span className="font-mono text-[11px]">{schema}</span>
               <span className="text-muted-foreground/30">|</span>
-              <span className="font-mono text-[11px] text-muted-foreground/60">{projectId}</span>
+              <span className="font-mono text-[11px] text-muted-foreground/60">
+                {connectionName}
+              </span>
               {loading && <Loader2 className="h-3 w-3 animate-spin ml-1" />}
             </DialogDescription>
           </div>

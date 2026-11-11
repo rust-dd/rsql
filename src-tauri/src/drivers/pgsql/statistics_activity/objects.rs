@@ -126,41 +126,20 @@ pub async fn load_fk_details(
         .collect())
 }
 
+const FOREIGN_KEY_SQL: &str = include_str!("../sql/foreign_keys.sql");
+
 pub async fn load_foreign_keys(
     client: &Client,
     schema: &str,
 ) -> Result<Vec<ForeignKeyInfo>, AppError> {
     let rows = client
-        .query(
-            r#"SELECT
-                 kcu.table_name AS source_table,
-                 kcu.column_name AS source_column,
-                 ccu.table_name AS target_table,
-                 ccu.column_name AS target_column
-               FROM information_schema.table_constraints tc
-               JOIN information_schema.key_column_usage kcu
-                 ON tc.constraint_name = kcu.constraint_name
-                 AND tc.table_schema = kcu.table_schema
-               JOIN information_schema.constraint_column_usage ccu
-                 ON ccu.constraint_name = tc.constraint_name
-                 AND ccu.table_schema = tc.table_schema
-               WHERE tc.constraint_type = 'FOREIGN KEY'
-                 AND tc.table_schema = $1
-               ORDER BY kcu.table_name, kcu.column_name"#,
-            &[&schema],
-        )
+        .query(FOREIGN_KEY_SQL, &[&schema])
         .await
         .map_err(query_failed)?;
 
     Ok(rows
         .iter()
-        .map(|r| {
-            let src_table: String = r.get(0);
-            let src_col: String = r.get(1);
-            let tgt_table: String = r.get(2);
-            let tgt_col: String = r.get(3);
-            (src_table, src_col, tgt_table, tgt_col)
-        })
+        .map(|r| (r.get(0), r.get(1), r.get(2), r.get(3), r.get(4)))
         .collect())
 }
 
