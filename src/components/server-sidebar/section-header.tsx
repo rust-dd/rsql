@@ -1,36 +1,33 @@
-import { ChevronDown, ChevronRight } from "lucide-react";
 import type React from "react";
-import { IndentGuides } from "./indent-guides";
+import { TreeRow } from "./tree-row";
 
 export function SectionHeader({
-  indent,
+  depth,
   label,
+  count,
   icon,
   expanded,
+  loading,
   onClick,
 }: {
-  indent: number;
+  depth: number;
   label: string;
+  count?: number;
   icon: React.ReactNode;
-  sectionKey?: string;
   expanded: boolean;
+  loading?: boolean;
   onClick: () => void;
 }) {
   return (
-    <button
-      type="button"
+    <TreeRow
+      depth={depth}
+      icon={icon}
+      label={label}
+      muted
+      detail={count === undefined ? undefined : String(count)}
+      expanded={expanded}
+      loading={loading}
       onClick={onClick}
-      className="relative flex w-full items-center gap-1.5 py-0.5 text-left hover:bg-sidebar-accent transition-colors rounded-sm whitespace-nowrap"
-      style={{ paddingLeft: `${indent}px` }}
-    >
-      <IndentGuides indent={indent} />
-      {expanded ? (
-        <ChevronDown className="h-3 w-3 shrink-0 text-muted-foreground" />
-      ) : (
-        <ChevronRight className="h-3 w-3 shrink-0 text-muted-foreground" />
-      )}
-      <span className="shrink-0">{icon}</span>
-      <span className="font-mono text-[11px] font-semibold text-muted-foreground">{label}</span>
-    </button>
+    />
   );
 }

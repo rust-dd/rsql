@@ -1,15 +1,12 @@
-import { I } from "./constants";
+import { CHEVRON_WIDTH, indentPx } from "./constants";
 
-export function IndentGuides({ indent }: { indent: number }) {
-  const guides: number[] = [];
-  // Draw guides at each nesting level (every 12px starting from the first nested level)
-  for (let x = I.cat + 4; x < indent; x += 12) {
-    guides.push(x);
-  }
+/** One line per ancestor, centred under that ancestor's chevron. */
+export function IndentGuides({ depth }: { depth: number }) {
+  const lefts = Array.from({ length: depth }, (_, level) => indentPx(level) + CHEVRON_WIDTH / 2);
   return (
     <>
-      {guides.map((x) => (
-        <span key={x} className="sidebar-indent-guide" style={{ left: `${x}px` }} />
+      {lefts.map((left) => (
+        <span key={left} className="sidebar-indent-guide" style={{ left: `${left}px` }} />
       ))}
     </>
   );

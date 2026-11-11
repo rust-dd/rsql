@@ -1,7 +1,7 @@
 import { Copy, FileText, Trash2 } from "lucide-react";
 import { projectName } from "@/stores/project-store";
 import type { SavedQuery } from "@/stores/query-store";
-import { I } from "./constants";
+import { DEPTH } from "./constants";
 import { TreeRow } from "./tree-row";
 import type { SidebarRenderCtx } from "./types";
 
@@ -26,7 +26,7 @@ export function renderSavedQueries(
           {savedQueries.map((q) => (
             <TreeRow
               key={q.id}
-              indent={I.server}
+              depth={DEPTH.server}
               icon={<FileText className="h-3.5 w-3.5 text-primary/60" />}
               label={q.title}
               selected={selectedItem === `query::${q.id}`}
@@ -57,7 +57,7 @@ export function renderSavedQueries(
                 ]);
               }}
               trailing={
-                <span className="font-mono text-[10px] text-muted-foreground shrink-0">
+                <span className="truncate font-mono text-[10px] text-muted-foreground">
                   {projectName(projects, q.projectId)}
                 </span>
               }
