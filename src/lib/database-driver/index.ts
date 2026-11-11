@@ -36,11 +36,12 @@ export type WireRuleDetail = [string, string];
 export type WirePolicyDetail = [string, string, string];
 export type WireFunctionInfo = [string, string, string];
 export type WireTriggerFunctionInfo = [string, string];
-export type WireForeignKeyInfo = [string, string, string, string];
+export type WireForeignKeyInfo = [string, string, string, string, string];
 
 export interface ForeignKey {
   sourceTable: string;
   sourceColumn: string;
+  targetSchema: string;
   targetTable: string;
   targetColumn: string;
 }

@@ -2,6 +2,9 @@ import { create } from "zustand";
 import { immer } from "zustand/middleware/immer";
 import { type ConnectionSlice, createConnectionSlice } from "./connection";
 import { type CoreSlice, createCoreSlice } from "./core";
+
+export { projectName } from "./core";
+
 import { createIndexesSlice, type IndexesSlice } from "./indexes";
 import { createSchemaSlice, type SchemaSlice } from "./schema";
 import { createViewsSlice, type ViewsSlice } from "./views";

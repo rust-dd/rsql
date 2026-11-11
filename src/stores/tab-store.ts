@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type { EditSession } from "@/lib/mutations";
-import { cancelExecution, releaseTabResources } from "@/lib/tab-resources";
+import { cancelExecution, releaseTabEditors, releaseTabResources } from "@/lib/tab-resources";
 import type { CellValue } from "@/lib/wire";
 import type { ExplainPlan, QueryResult, Tab, VirtualQuery } from "@/types";
 
@@ -34,6 +34,7 @@ interface TabState {
   setResult: (tabId: string, result: QueryResult) => void;
   setExecuting: (tabId: string, executing: boolean, execId?: string) => void;
   setProjectId: (tabId: string, projectId: string) => void;
+  remapProjectIds: (legacyIds: Map<string, string>) => void;
   setExplainResult: (tabId: string, plan: ExplainPlan | undefined) => void;
   setVirtualQuery: (tabId: string, vq: VirtualQuery | undefined) => void;
   toggleSplit: (tabId: string) => void;
@@ -54,6 +55,14 @@ interface TabState {
 function withTab(state: TabState, tabId: string, apply: (tab: Tab) => void): void {
   const tab = state.tabs.find((t) => t.id === tabId);
   if (tab) apply(tab);
+}
+
+/** Points tabs persisted under a pre-UUID project key at that project's new key. */
+export function remapTabProjectIds(tabs: Tab[], legacyIds: Map<string, string>): Tab[] {
+  return tabs.map((tab) => {
+    const next = tab.projectId ? legacyIds.get(tab.projectId) : undefined;
+    return next ? { ...tab, projectId: next } : tab;
+  });
 }
 
 function makeSingletonTab(
@@ -141,6 +150,7 @@ export const useTabStore = create<TabState>()(
         const closing = get().tabs[index];
         if (!closing) return;
         releaseTabResources(closing.id);
+        releaseTabEditors(closing.id);
         set((s) => {
           s.tabs.splice(index, 1);
           if (s.tabs.length === 0) {
@@ -156,7 +166,10 @@ export const useTabStore = create<TabState>()(
       },
 
       closeAllTabs: () => {
-        for (const tab of get().tabs) releaseTabResources(tab.id);
+        for (const tab of get().tabs) {
+          releaseTabResources(tab.id);
+          releaseTabEditors(tab.id);
+        }
         set((s) => {
           s.tabs = [];
           s.selectedTabIndex = -1;
@@ -166,7 +179,10 @@ export const useTabStore = create<TabState>()(
       closeOtherTabs: (index) => {
         if (!get().tabs[index]) return;
         for (const [i, tab] of get().tabs.entries()) {
-          if (i !== index) releaseTabResources(tab.id);
+          if (i !== index) {
+            releaseTabResources(tab.id);
+            releaseTabEditors(tab.id);
+          }
         }
         set((s) => {
           const keep = s.tabs[index];
@@ -208,6 +224,11 @@ export const useTabStore = create<TabState>()(
             tab.execId = executing ? execId : undefined;
           });
         }),
+      remapProjectIds: (legacyIds) => {
+        const tabs = get().tabs;
+        const next = remapTabProjectIds(tabs, legacyIds);
+        if (next.some((tab, idx) => tab !== tabs[idx])) set({ tabs: next });
+      },
       setProjectId: (tabId, projectId) => {
         if (get().tabs.find((tab) => tab.id === tabId)?.projectId === projectId) return;
         releaseTabResources(tabId);

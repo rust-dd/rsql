@@ -1,4 +1,5 @@
 import { Copy, FileText, Trash2 } from "lucide-react";
+import { projectName } from "@/stores/project-store";
 import type { SavedQuery } from "@/stores/query-store";
 import { I } from "./constants";
 import { TreeRow } from "./tree-row";
@@ -9,7 +10,7 @@ export function renderSavedQueries(
   savedQueries: SavedQuery[],
   removeQuery: (id: string) => Promise<void>,
 ) {
-  const { selectedItem, setSelectedItem, openTab, showMenu, copy } = ctx;
+  const { projects, selectedItem, setSelectedItem, openTab, showMenu, copy } = ctx;
   return (
     <div className="border-t border-sidebar-border">
       <div className="flex h-8 items-center justify-between px-3">
@@ -57,7 +58,7 @@ export function renderSavedQueries(
               }}
               trailing={
                 <span className="font-mono text-[10px] text-muted-foreground shrink-0">
-                  {q.projectId}
+                  {projectName(projects, q.projectId)}
                 </span>
               }
             />

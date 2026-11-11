@@ -10,6 +10,8 @@ import { useTabStore } from "@/stores/tab-store";
 import { useUIStore } from "@/stores/ui-store";
 import type { ProjectDetails } from "@/types";
 import { AddDatabaseDialog } from "./add-database-dialog";
+import { serverGroupAlias } from "./labels";
+import { RenameServerDialog } from "./rename-server-dialog";
 import { renderSavedQueries } from "./render-saved-queries";
 import { renderServerGroup } from "./render-server-group";
 import type { CsvImportTarget, ObjectKind, PropsModalState, SidebarRenderCtx } from "./types";
@@ -43,6 +45,7 @@ export function ServerSidebar({
   const refreshConnection = useProjectStore((s) => s.refreshConnection);
   const deleteProject = useProjectStore((s) => s.deleteProject);
   const addDatabaseToServer = useProjectStore((s) => s.addDatabaseToServer);
+  const renameServer = useProjectStore((s) => s.renameServer);
   const setConnectionModalOpen = useUIStore((s) => s.setConnectionModalOpen);
   const openTab = useTabStore((s) => s.openTab);
   const openMonitorTab = useTabStore((s) => s.openMonitorTab);
@@ -83,6 +86,8 @@ export function ServerSidebar({
   }, [queriesLoaded, loadQueries]);
 
   const [addDbSource, setAddDbSource] = React.useState<string | null>(null);
+  const [renameServerPids, setRenameServerPids] = React.useState<string[] | null>(null);
+  const renameTarget = renameServerPids?.[0] ? projects[renameServerPids[0]] : undefined;
   const [expanded, setExpanded] = React.useState<Record<string, boolean>>({});
   const [loading, setLoading] = React.useState<Record<string, boolean>>({});
   const [selectedItem, setSelectedItem] = React.useState<string | null>(null);
@@ -174,6 +179,7 @@ export function ServerSidebar({
     setSelectedItem,
     setCsvImportTarget,
     setAddDbSource,
+    setRenameServerPids,
     openProperties,
     toggle,
     isOpen,
@@ -237,6 +243,21 @@ export function ServerSidebar({
           if (addDbSource) {
             await addDatabaseToServer(addDbSource, name, database);
             setAddDbSource(null);
+          }
+        }}
+      />
+
+      <RenameServerDialog
+        open={!!renameServerPids}
+        onOpenChange={(open) => {
+          if (!open) setRenameServerPids(null);
+        }}
+        address={renameTarget ? `${renameTarget.host}:${renameTarget.port}` : ""}
+        currentAlias={renameServerPids ? (serverGroupAlias(projects, renameServerPids) ?? "") : ""}
+        onRename={async (alias) => {
+          if (renameServerPids) {
+            await renameServer(renameServerPids, alias);
+            setRenameServerPids(null);
           }
         }}
       />

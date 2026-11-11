@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { cn } from "@/lib/utils";
 import { useHistoryStore } from "@/stores/history-store";
-import { useProjectStore } from "@/stores/project-store";
+import { projectName, useProjectStore } from "@/stores/project-store";
 import { useActiveTab } from "@/stores/tab-store";
 import { getSystemResourceUsage, type SystemResourceUsage } from "@/tauri";
 import { ProjectConnectionStatus } from "@/types";
@@ -99,7 +99,7 @@ export function StatusBar() {
                 !connStatus && "bg-muted",
               )}
             />
-            <span>{projectId}</span>
+            <span>{projectName(projects, projectId)}</span>
             <span className="opacity-50">&bull;</span>
             <span>{details.database}</span>
           </div>

@@ -23,6 +23,10 @@ export async function insertProject(project_id: string, project_details: string[
   await invoke("project_db_insert", { project_id, project_details });
 }
 
+export async function setServerAlias(project_ids: string[], alias: string): Promise<void> {
+  await invoke("project_db_set_server_alias", { project_ids, alias });
+}
+
 export async function deleteProject(project_id: string): Promise<void> {
   await invoke("project_db_delete", { project_id });
 }

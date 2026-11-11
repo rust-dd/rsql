@@ -35,7 +35,7 @@ export function TreeRow({
       onDoubleClick={onDoubleClick}
       onContextMenu={onContextMenu}
       className={cn(
-        "relative flex w-full items-center gap-1.5 py-1 text-left text-sm transition-colors rounded-sm whitespace-nowrap",
+        "relative flex w-full min-w-0 items-center gap-1 overflow-hidden py-1 text-left text-sm transition-colors rounded-sm whitespace-nowrap",
         selected
           ? "bg-primary/10 text-foreground"
           : "hover:bg-white/[0.06] dark:hover:bg-white/[0.06] hover:bg-black/[0.04]",
@@ -53,8 +53,15 @@ export function TreeRow({
         )
       ) : null}
       <span className="shrink-0">{icon}</span>
-      <span className={cn("font-mono text-xs", bold && "font-semibold")}>{label}</span>
-      {trailing && <span className="ml-auto mr-1">{trailing}</span>}
+      <span
+        className={cn("min-w-0 flex-1 truncate font-mono text-xs", bold && "font-semibold")}
+        title={label}
+      >
+        {label}
+      </span>
+      {trailing && (
+        <span className="ml-auto mr-1 max-w-[max(4rem,40%)] shrink-0 truncate">{trailing}</span>
+      )}
     </button>
   );
 }

@@ -1,9 +1,10 @@
 use std::{collections::BTreeMap, sync::Arc, time::Duration};
 
 use deadpool_postgres::{
-    Manager as PgManager, ManagerConfig, Pool, RecyclingMethod, Runtime, Timeouts,
+    Hook, HookError, Manager as PgManager, ManagerConfig, Pool, RecyclingMethod, Runtime, Timeouts,
 };
 
+use super::session_cleanup::reset_session;
 use crate::AppState;
 use crate::common::enums::{AppError, ProjectConnectionStatus};
 use crate::drivers::pgsql::get_pool;
@@ -41,36 +42,34 @@ pub(crate) fn create_pg_pool(
     max_size: usize,
 ) -> std::result::Result<Pool, AppError> {
     let manager_config = ManagerConfig {
-        recycling_method: RecyclingMethod::Custom("ROLLBACK".into()),
+        recycling_method: RecyclingMethod::Fast,
     };
     let timeouts = Timeouts {
         wait: Some(POOL_WAIT),
         ..Timeouts::default()
     };
 
-    // deadpool needs to know which runtime drives its timers; without this the
-    // builder rejects any pool that sets a timeout.
-    if use_ssl {
+    let manager = if use_ssl {
         let tls_connector = TlsConnector::builder()
             .build()
             .map_err(|e| AppError::ConnectionFailed(e.to_string()))?;
         let tls = MakeTlsConnector::new(tls_connector);
-        let manager = PgManager::from_config(cfg.clone(), tls, manager_config);
-        Pool::builder(manager)
-            .max_size(max_size)
-            .timeouts(timeouts)
-            .runtime(Runtime::Tokio1)
-            .build()
-            .map_err(|e| AppError::ConnectionFailed(e.to_string()))
+        PgManager::from_config(cfg.clone(), tls, manager_config)
     } else {
-        let manager = PgManager::from_config(cfg.clone(), NoTls, manager_config);
-        Pool::builder(manager)
-            .max_size(max_size)
-            .timeouts(timeouts)
-            .runtime(Runtime::Tokio1)
-            .build()
-            .map_err(|e| AppError::ConnectionFailed(e.to_string()))
-    }
+        PgManager::from_config(cfg.clone(), NoTls, manager_config)
+    };
+
+    // deadpool needs to know which runtime drives its timers; without this the
+    // builder rejects any pool that sets a timeout.
+    Pool::builder(manager)
+        .max_size(max_size)
+        .timeouts(timeouts)
+        .runtime(Runtime::Tokio1)
+        .post_recycle(Hook::async_fn(|client, _| {
+            Box::pin(async move { reset_session(client).await.map_err(HookError::Backend) })
+        }))
+        .build()
+        .map_err(|e| AppError::ConnectionFailed(e.to_string()))
 }
 
 pub(crate) async fn acquire_client(

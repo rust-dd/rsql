@@ -3,7 +3,11 @@ use tauri::Manager;
 use tauri::menu::{AboutMetadata, MenuBuilder, SubmenuBuilder};
 use tokio::sync::Mutex;
 
-use crate::{AppState, LOCAL_DB_NAME, dbs::migrations, terminal, utils};
+use crate::{
+    AppState, LOCAL_DB_NAME,
+    dbs::{self, migrations},
+    terminal, utils,
+};
 
 pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     #[cfg(desktop)]
@@ -36,63 +40,23 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
             .expect("Failed to open local database");
 
         let conn = db.connect().expect("Failed to create connection");
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS projects (
-                id TEXT PRIMARY KEY,
-                driver TEXT NOT NULL DEFAULT 'PGSQL',
-                username TEXT NOT NULL DEFAULT '',
-                password TEXT NOT NULL DEFAULT '',
-                database TEXT NOT NULL DEFAULT '',
-                host TEXT NOT NULL DEFAULT '',
-                port TEXT NOT NULL DEFAULT '',
-                ssl TEXT NOT NULL DEFAULT 'false'
-            )",
-            (),
-        )
-        .await
-        .expect("Failed to create projects table");
-
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS queries (
-                id TEXT PRIMARY KEY,
-                sql TEXT NOT NULL DEFAULT ''
-            )",
-            (),
-        )
-        .await
-        .expect("Failed to create queries table");
-
-        conn.execute(
-            "CREATE TABLE IF NOT EXISTS workspaces (
-                name TEXT PRIMARY KEY,
-                tabs TEXT NOT NULL DEFAULT '[]'
-            )",
-            (),
-        )
-        .await
-        .expect("Failed to create workspaces table");
+        dbs::schema::create_local_schema(&conn)
+            .await
+            .expect("Failed to create local tables");
 
         if let Err(error) = migrations::cleanup_legacy_snapshots(&conn).await {
             tracing::warn!(%error, "Legacy result snapshot cleanup failed");
         }
 
-        for col in [
-            "ssh_enabled",
-            "ssh_host",
-            "ssh_port",
-            "ssh_user",
-            "ssh_password",
-            "ssh_key_path",
-        ] {
-            conn.execute(
-                &format!(
-                    "ALTER TABLE projects ADD COLUMN {} TEXT NOT NULL DEFAULT ''",
-                    col
-                ),
-                (),
-            )
-            .await
-            .ok(); // Ignore "column already exists" errors
+        let started = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|elapsed| elapsed.as_secs())
+            .unwrap_or_default();
+        let backup_path = format!("{db_path}.{started}.bak");
+        match dbs::project_ids::migrate_project_ids(&conn, Some(&backup_path)).await {
+            Ok(0) => {}
+            Ok(count) => tracing::info!(count, %backup_path, "Moved projects to UUID keys"),
+            Err(error) => tracing::error!(%error, "Project key migration failed"),
         }
 
         crate::ssh::host_keys::initialize(&conn)
@@ -107,7 +71,9 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
             ),
             client_ssl: Arc::new(Mutex::new(BTreeMap::new())),
             local_db: db,
-            resource_monitor: Arc::new(Mutex::new(utils::ResourceMonitor::new())),
+            resource_monitor: Arc::new(Mutex::new(
+                utils::ResourceMonitor::new().expect("sysinfo supports every desktop target"),
+            )),
             virtual_cache: Arc::new(Mutex::new(crate::drivers::pgsql::VirtualCache::new())),
             notify_handles: Arc::new(Mutex::new(BTreeMap::new())),
             ssh_tunnels: Arc::new(Mutex::new(BTreeMap::new())),

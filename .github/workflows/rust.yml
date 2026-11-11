@@ -83,7 +83,7 @@ jobs:
 
       - name: Integration tests against PostgreSQL
         run: |
-          cargo test --locked --test row_mutations --test schema_index -- --ignored
+          cargo test --locked --test row_mutations --test schema_index --test foreign_keys -- --ignored
           cargo test --locked --bin rsql -- --ignored
         working-directory: src-tauri
         env:

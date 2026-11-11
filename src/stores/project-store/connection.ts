@@ -3,6 +3,7 @@ import type { StateCreator } from "zustand";
 import { DriverFactory } from "@/lib/database-driver";
 import { useSchemaIndexStore } from "@/stores/schema-index-store";
 import { ProjectConnectionStatus as PCS } from "@/types";
+import { projectName } from "./core";
 import type { ProjectState } from "./index";
 
 export type ConnectionSlice = {
@@ -73,8 +74,7 @@ export const createConnectionSlice: StateCreator<
         s.status[projectId] = PCS.Failed;
         s.connectionErrors[projectId] = msg;
       });
-      const d = projects[projectId];
-      toast.error(`Connection failed: ${d?.database || projectId}`, {
+      toast.error(`Connection failed: ${projectName(projects, projectId)}`, {
         description: msg,
         duration: 10000,
       });

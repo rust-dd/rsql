@@ -235,9 +235,10 @@ export class PostgreSQLDriver implements DatabaseDriver {
       project_id: projectId,
       schema,
     });
-    return wire.map(([sourceTable, sourceColumn, targetTable, targetColumn]) => ({
+    return wire.map(([sourceTable, sourceColumn, targetSchema, targetTable, targetColumn]) => ({
       sourceTable,
       sourceColumn,
+      targetSchema,
       targetTable,
       targetColumn,
     }));

@@ -73,6 +73,7 @@ export interface SidebarRenderCtx {
   setSelectedItem: (k: string | null) => void;
   setCsvImportTarget: (t: CsvImportTarget | null) => void;
   setAddDbSource: (id: string | null) => void;
+  setRenameServerPids: (pids: string[] | null) => void;
   openProperties: (objectType: ObjectKind, projectId: string, schema: string, name: string) => void;
 
   toggle: (key: string) => void;

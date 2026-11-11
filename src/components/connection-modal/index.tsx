@@ -21,7 +21,7 @@ interface ConnectionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
   onSave: (connection: ConnectionConfig) => void;
-  editData?: { name: string; details: ProjectDetails } | null;
+  editData?: { id: string; details: ProjectDetails } | null;
 }
 
 export interface ConnectionConfig {
@@ -42,7 +42,7 @@ export interface ConnectionConfig {
   sshKeyPath: string;
 }
 
-const defaultForm: Omit<ConnectionConfig, "id"> = {
+export const defaultForm: Omit<ConnectionConfig, "id"> = {
   name: "",
   driver: "PGSQL",
   host: "localhost",
@@ -84,6 +84,15 @@ function parseConnectionString(url: string): Partial<Omit<ConnectionConfig, "id"
   }
 }
 
+/** An edited connection keeps its key, so renaming never orphans its tabs or saved queries. */
+export function buildConnection(
+  form: Omit<ConnectionConfig, "id">,
+  editId?: string,
+): ConnectionConfig {
+  const name = form.name.trim() || form.database || form.host;
+  return { ...form, id: editId ?? crypto.randomUUID(), name };
+}
+
 export function ConnectionModal({ open, onOpenChange, onSave, editData }: ConnectionModalProps) {
   const [formData, setFormData] = useState<Omit<ConnectionConfig, "id">>(defaultForm);
   const [connString, setConnString] = useState("");
@@ -94,7 +103,7 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
   useEffect(() => {
     if (open && editData) {
       setFormData({
-        name: editData.name,
+        name: editData.details.name || editData.id,
         driver: editData.details.driver,
         host: editData.details.host,
         port: editData.details.port,
@@ -158,11 +167,7 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
-    const connection: ConnectionConfig = {
-      ...formData,
-      id: editData ? editData.name : `conn-${Date.now()}`,
-    };
-    onSave(connection);
+    onSave(buildConnection(formData, editData?.id));
     onOpenChange(false);
   };
 
@@ -191,7 +196,6 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
           <NameField
             value={formData.name}
             onChange={(value) => setFormData({ ...formData, name: value })}
-            disabled={isEditing}
           />
 
           <HostPortFields

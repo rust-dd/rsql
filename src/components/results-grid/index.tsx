@@ -27,6 +27,7 @@ import {
   buildCellContent,
   buildGridTheme,
   buildModifiedOverride,
+  coercePasteValue,
   computeFkColIndices,
   computeGridColumns,
   DELETED_OVERRIDE,
@@ -38,7 +39,7 @@ interface ResultsGridProps {
   columns: string[];
   rows: CellValue[][];
   isEditing?: boolean;
-  cellEdits?: Map<string, string>;
+  cellEdits?: Map<string, CellValue>;
   deletedRows?: Set<number>;
   onCellEdit?: (rowIndex: number, colIndex: number, value: string) => void;
   onRowDelete?: (rowIndex: number) => void;
@@ -295,6 +296,7 @@ export function ResultsGrid({
         rows={totalRowCount}
         getCellContent={getCellContent}
         onCellEdited={isEditing ? onCellEdited : undefined}
+        coercePasteValue={coercePasteValue}
         onCellClicked={handleRowClick}
         onVisibleRegionChanged={handleVisibleRegionChanged}
         theme={gridTheme}

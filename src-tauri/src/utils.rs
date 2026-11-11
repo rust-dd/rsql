@@ -64,21 +64,21 @@ pub struct ResourceMonitor {
 }
 
 impl ResourceMonitor {
-    pub fn new() -> Self {
+    pub fn new() -> Result<Self, sysinfo::Error> {
         let app_pid = get_current_pid().unwrap_or_else(|_| Pid::from_u32(std::process::id()));
-        let mut system = System::new_all();
+        let mut system = System::new_all()?;
         system.refresh_processes(ProcessesToUpdate::All, true);
-        let mut networks = Networks::new_with_refreshed_list();
+        let mut networks = Networks::new_with_refreshed_list()?;
         networks.refresh(true);
 
-        Self {
+        Ok(Self {
             system,
             networks,
             last_sample_at: Instant::now(),
             app_pid,
             tracked: vec![app_pid],
             samples_since_rediscover: REDISCOVER_EVERY,
-        }
+        })
     }
 
     pub fn sample(&mut self) -> SystemResourceUsage {

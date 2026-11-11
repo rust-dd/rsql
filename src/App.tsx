@@ -71,7 +71,7 @@ export default function App() {
   const updateContent = useTabStore((s) => s.updateContent);
 
   const [editingConnection, setEditingConnection] = useState<{
-    name: string;
+    id: string;
     details: ProjectDetails;
   } | null>(null);
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
@@ -83,6 +83,7 @@ export default function App() {
 
   const handleSaveConnection = useCallback(
     async (connection: {
+      id: string;
       name: string;
       driver: string;
       username: string;
@@ -99,6 +100,8 @@ export default function App() {
       sshKeyPath?: string;
     }) => {
       const details = {
+        name: connection.name,
+        serverAlias: editingConnection?.details.serverAlias ?? "",
         driver: connection.driver as "PGSQL",
         username: connection.username,
         password: connection.password,
@@ -114,10 +117,10 @@ export default function App() {
         sshKeyPath: connection.sshKeyPath ?? "",
       };
       if (editingConnection) {
-        await updateConnection(connection.name, details);
+        await updateConnection(connection.id, details);
         setEditingConnection(null);
       } else {
-        await saveConnection(connection.name, details);
+        await saveConnection(connection.id, details);
       }
     },
     [saveConnection, updateConnection, editingConnection],
@@ -127,7 +130,7 @@ export default function App() {
     (projectId: string) => {
       const details = projects[projectId];
       if (details) {
-        setEditingConnection({ name: projectId, details });
+        setEditingConnection({ id: projectId, details });
         setConnectionModalOpen(true);
       }
     },
@@ -240,6 +243,7 @@ export default function App() {
                       className="flex flex-col overflow-hidden"
                     >
                       <QueryEditor
+                        tabId={activeTab.id}
                         value={activeTab.editorValue}
                         onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                         onExecute={() => void runQuery()}
@@ -271,6 +275,8 @@ export default function App() {
                       className="flex flex-col overflow-hidden"
                     >
                       <QueryEditor
+                        tabId={activeTab.id}
+                        slot="split"
                         value={activeTab.splitEditorValue ?? ""}
                         onChange={(v) =>
                           activeTabId && useTabStore.getState().updateSplitContent(activeTabId, v)
@@ -326,6 +332,7 @@ export default function App() {
                   className="flex flex-col overflow-hidden"
                 >
                   <QueryEditor
+                    tabId={activeTab.id}
                     value={activeTab?.editorValue ?? ""}
                     onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                     onExecute={() => void runQuery()}

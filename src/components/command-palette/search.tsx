@@ -1,6 +1,6 @@
 import { Command } from "cmdk";
 import { Activity, Database, Eye, FileCode, Layers, Network, Table } from "lucide-react";
-import type { useProjectStore } from "@/stores/project-store";
+import { projectName, type useProjectStore } from "@/stores/project-store";
 import { useTabStore } from "@/stores/tab-store";
 
 type ProjectState = ReturnType<typeof useProjectStore.getState>;
@@ -26,14 +26,14 @@ export function ConnectionsGroup({
         return (
           <Command.Item
             key={`conn-${id}`}
-            value={`${id} ${details.database} ${details.host} connection`}
+            value={`${projectName(projects, id)} ${details.database} ${details.host} connection ${id}`}
             onSelect={() => {
               onClose();
               if (!connected) void connectProject(id);
             }}
           >
             <Database className="h-4 w-4 text-muted-foreground" />
-            <span>{id}</span>
+            <span>{projectName(projects, id)}</span>
             <span className="cmdk-detail">
               {details.host}:{details.port}/{details.database}
             </span>
@@ -49,14 +49,14 @@ export function ConnectionsGroup({
         return (
           <Command.Item
             key={`monitor-${id}`}
-            value={`${id} performance monitor`}
+            value={`${projectName(projects, id)} performance monitor ${id}`}
             onSelect={() => {
               onClose();
               useTabStore.getState().openMonitorTab(id);
             }}
           >
             <Activity className="h-4 w-4 text-muted-foreground" />
-            <span>Monitor {id}</span>
+            <span>Monitor {projectName(projects, id)}</span>
             <span className="cmdk-meta">Performance</span>
           </Command.Item>
         );
@@ -65,7 +65,7 @@ export function ConnectionsGroup({
         projectSchemas.map((s) => (
           <Command.Item
             key={`erd-${projectId}-${s}`}
-            value={`${projectId} ${s} ERD diagram`}
+            value={`${projectName(projects, projectId)} ${s} ERD diagram ${projectId}`}
             onSelect={() => {
               onClose();
               useTabStore.getState().openERDTab(projectId, s);
@@ -73,7 +73,7 @@ export function ConnectionsGroup({
           >
             <Network className="h-4 w-4 text-muted-foreground" />
             <span>
-              ERD {projectId}/{s}
+              ERD {projectName(projects, projectId)}/{s}
             </span>
             <span className="cmdk-meta">Diagram</span>
           </Command.Item>

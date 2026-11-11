@@ -1,265 +1,210 @@
 # RSQL
 
-A high-performance, open-source PostgreSQL client built with Tauri v2, React, and Rust. Designed from the ground up to be fast — even with millions of rows.
+**A desktop PostgreSQL client for macOS, Windows and Linux.**
 
-Free forever. No account, no telemetry, no feature gating.
+Write SQL, edit data, explore schemas and inspect query plans in one app. RSQL is built with Rust, Tauri and React, and is free and open source under the MIT license. No account required. No telemetry.
 
-![RSQL screenshot](docs/rsql.png)
+[Download](https://github.com/rust-dd/rsql/releases/latest) · [First query](#run-your-first-query) · [Features](#features) · [Development](#development) · [Report an issue](https://github.com/rust-dd/rsql/issues)
 
-> **macOS note:** App signing is in progress. To allow on macOS:
-> ```bash
-> xattr -dr com.apple.quarantine /Applications/RSQL.app
-> ```
+![RSQL desktop app with the schema explorer, SQL editor and results grid](docs/rsql.png)
 
----
+## Install
+
+Choose an installer from the [latest release](https://github.com/rust-dd/rsql/releases/latest):
+
+| Platform | Architecture | Download |
+| --- | --- | --- |
+| macOS | Apple Silicon | `rsql_<version>_aarch64.dmg` |
+| macOS | Intel | `rsql_<version>_x64.dmg` |
+| Windows | x64 | `.msi` or `-setup.exe` |
+| Linux | x86_64 | `.AppImage`, `.deb` or `.rpm` |
+
+On macOS, open the DMG and drag RSQL into Applications. Signing and notarization details are documented in the [macOS release guide](docs/macos-release.md).
+
+RSQL checks for updates on startup. Use **Updates** in the top bar to check manually.
+
+## Run your first query
+
+1. Open the command palette with **Cmd/Ctrl+K** and choose **New Connection**.
+2. Enter your host, port, database, username and password, or paste a connection URL such as `postgresql://user:password@localhost:5432/mydb`. Enable SSL or configure an SSH tunnel if your server requires it.
+3. Click **Connect**, then select the connection for your query tab if needed.
+4. Enter a query and press **Cmd/Ctrl+Enter**, or click **Execute**:
+
+   ```sql
+   SELECT current_database(), current_user, version();
+   ```
+
+Expand the sidebar to browse schemas and tables. Use the command palette to find database objects, open another query tab, or save and load a workspace.
 
 ## Features
 
-### Query Editor
-- **Monaco SQL editor** — syntax highlighting, context-aware autocomplete (schemas, tables, columns, aliases), SQL snippets, SQL formatter
-- **Multi-tab interface** — open multiple queries side by side, split editor mode
-- **Query history** — searchable execution history with timing, row counts, and timestamps (last 500 queries)
-- **Workspaces** — save and restore groups of tabs across sessions
-- **Query timeout** — configurable per-query timeout (5s to 10min)
-- **Multi-statement execution** — `SELECT 1; INSERT ...; SELECT * FROM users;` handled natively
+### Write and organize SQL
 
-### Results
-- **WebGL canvas grid** — `@glideapps/glide-data-grid` renders directly to canvas. Zero DOM nodes per cell. Smooth 60fps scrolling through millions of rows
-- **Virtual pagination** — server-side cursors with 2,000-row pages. Only ~24 pages kept in memory at any time. 5M+ rows, same frontend memory as 1K rows
-- **Inline editing** — click to edit cells. Generates `UPDATE`/`DELETE` with proper quoting and transactions
-- **Record view** — form-style single-row viewer for wide tables
-- **Column sorting & filtering** — full-text search across results (debounced at 200ms)
-- **Result pinning & diff** — pin a result, run another query, see added/removed/changed rows (diff computed in Rust)
-- **Export** — CSV, JSON, SQL INSERT, Markdown, XML. Copy to clipboard or save to file
-- **CSV import** — import CSV files with column mapping preview
+- **Schema-aware completion:** Monaco editor with suggestions for schemas, tables, views, columns, functions and table aliases, plus SQL snippets and formatting.
+- **Tabs and split view:** work on several queries, compare queries side by side, and save workspaces for later.
+- **Saved queries and history:** keep queries for reuse and browse the last 500 executions in the current session.
+- **Execution controls:** cancel a running query or set a statement timeout per tab. Scripts can contain multiple statements; the last result set is displayed.
+- **Query plans:** inspect `EXPLAIN ANALYZE` output with timing, cost, and estimated versus actual rows for each node. Explain executes the query to collect measurements.
 
-### Schema Explorer
-- **Tree sidebar** — schemas, tables, views, materialized views, functions, trigger functions, indexes, constraints, triggers, rules, RLS policies
-- **Object properties** — detailed modal with columns, indexes, foreign keys, generated DDL, and a visual structure editor (ALTER TABLE builder)
-- **ERD diagrams** — auto-generated entity-relationship diagrams with FK lines, drag-and-drop layout, SVG export
-- **FK navigation** — click any foreign key value in the grid to jump directly to the referenced row
-- **Schema diff** — compare two schemas side by side, see modified/added/removed objects
-- **Command palette** — `Cmd+K` fuzzy search across tables, views, functions, connections, actions, and workspaces
+### Inspect and edit data
 
-### PostGIS & Spatial
-- **Map view** — automatic detection of geometry/geography columns (WKT, GeoJSON, EWKB). Rendered on OpenStreetMap tiles via Leaflet with Point, LineString, and Polygon support
+- **Results grid:** canvas rendering with pages loaded from Rust as you scroll through large results.
+- **Data editing:** update and delete rows in eligible single-table results, then apply changes together in one transaction. The query must include the table's primary key.
+- **Result tools:** search cells, inspect a row in Record view, follow foreign keys, and compare results against a pinned snapshot.
+- **Import and export:** import CSV with column mapping; export to CSV, JSON, SQL `INSERT`, Markdown or XML. Paged results support CSV export.
+- **Geometry preview:** view WKT, GeoJSON and EWKB point values on an OpenStreetMap map.
 
-### Performance & Monitoring
-- **EXPLAIN visualizer** — `EXPLAIN (ANALYZE, FORMAT JSON)` rendered as an interactive plan tree with cost breakdown, row estimates vs actuals, and timing per node
-- **Performance monitor** — dedicated dashboard with tabs:
-  - **Overview** — database-level statistics
-  - **Activity** — live `pg_stat_activity` (active sessions, running queries)
-  - **Tables** — seq scans, index scans, inserts, updates, deletes, dead tuples, last vacuum/analyze
-  - **Indexes** — index usage statistics
-  - **Locks** — active lock monitoring
-  - **Bloat** — table bloat detection
-  - **History** — query execution timeline
+In edit mode, type `NULL` in any letter case for SQL NULL, or `"NULL"` for literal text. Empty input remains an empty string; cell-to-cell pastes preserve literal text. See [result limits](#result-limits) for tools available on larger queries.
 
-### Administration
-- **Roles panel** — view roles with permission grants
-- **Extensions panel** — installed and available PostgreSQL extensions
-- **Enums panel** — browse ENUM types and their values
-- **PG settings** — view all PostgreSQL configuration parameters
-- **LISTEN/NOTIFY** — subscribe to channels, send notifications, discover channels from triggers
+### Explore schemas and manage PostgreSQL
 
-### Developer Tools
-- **Inline terminal** — built-in PTY terminal via `portable-pty` + `xterm.js`. Run psql, migrations, or any shell command without leaving the app
-- **DDL generation** — generate `CREATE` statements for any database object
-- **OS notifications** — notify on long-running queries (>5s) when the app is unfocused
+- **Object browser:** databases, roles, tablespaces, schemas, tables, views, materialized views and functions, with columns, indexes, constraints, triggers, rules and row-level security policies.
+- **Schema tools:** inspect DDL, generate `ALTER TABLE` statements in the structure editor, compare schemas, and export schema ER diagrams as SVG.
+- **Server tools:** roles and grants, extensions, enums, server settings, `LISTEN`/`NOTIFY`, and a built-in terminal.
+- **Performance monitor:** activity, locks, table statistics, index advice, bloat estimates and the slowest queries of the current session.
+- **Maintenance:** run actions such as `VACUUM`, `ANALYZE` and `REINDEX` from object properties.
 
-### Connection Management
-- **Multiple connections** — manage and switch between databases
-- **SSH tunnels** — connect to remote databases through SSH (password and key file auth) via native Rust `russh`
-- **SSL/TLS** — secure connections with `postgres-native-tls`
-- **Connection pooling** — dual pool: 16 connections for queries, 8 for metadata. Query and metadata traffic never block each other
-- **Test connection** — verify connectivity before saving
+### Manage connections
 
----
+- Save and rename connections, paste PostgreSQL connection URLs, and enable SSL.
+- Connect through SSH with a password or key file. RSQL verifies the server's host key before authenticating.
+- Give connections on the same server a shared label while keeping the server address visible.
+- Switch between light and dark themes; the choice is restored on restart.
 
-## Why It's Fast
+## Keyboard shortcuts
 
-RSQL is not just another Electron wrapper around a web UI. Every layer of the stack is optimized for throughput and responsiveness.
+Use **Cmd** on macOS and **Ctrl** on Windows and Linux.
 
-### Packed Binary IPC
-Results are encoded as flat strings with ASCII unit/record separators (`\x1F` / `\x1E`), not nested JSON arrays. A 100K-row result serializes in microseconds. No per-cell quoting, no array nesting, no JSON overhead.
+| Action | Shortcut |
+| --- | --- |
+| Execute SQL in the focused editor | Cmd/Ctrl+Enter |
+| Explain the query | Cmd/Ctrl+Shift+Enter |
+| Cancel the running query | Cmd/Ctrl+. |
+| Open the command palette | Cmd/Ctrl+K |
+| Open a terminal tab | Cmd/Ctrl+` |
+| Close the active tab | Cmd/Ctrl+W |
 
-### Zero-Copy Wire Protocol
-Queries use PostgreSQL's `simple_query` protocol — the server returns all values as pre-formatted text. No type conversion, no ORM mapping, no intermediate representations.
+## Result limits
 
-### SIMD JSON Serialization
-All IPC command responses use `sonic-rs` (SIMD-accelerated, AVX2/SSE4/NEON) instead of `serde_json`. Results are returned as raw `tauri::ipc::Response` — zero re-serialization by the framework. ~2-3x faster than serde_json for typical payloads.
+The main query pane uses 2,000-row pages by default. Larger results stay in Rust and are fetched by the grid as needed.
 
-### Virtual Pagination with Server-Side Cursors
-Large results use PostgreSQL cursors (`DECLARE CURSOR` + `FETCH FORWARD 10,000`). Pages of 2,000 rows are pre-packed into cache-friendly strings on the Rust side. Page serving is O(1) — zero processing at read time. The frontend keeps ~24 pages around the viewport; distant pages are LRU-evicted. No row limit on virtual pagination.
+| Capability | Up to 2,000 rows | More than 2,000 rows |
+| --- | --- | --- |
+| Browse results | Full result in the grid | Pages loaded as you scroll |
+| Search, Record view, editing, foreign key navigation and result diff | Available where the query supports them | Narrow the query to use these tools |
+| Export | CSV, JSON, SQL `INSERT`, Markdown, XML | CSV of the retained result |
+| Map view | Detected geometry values | First page only |
 
-### WebGL Canvas Rendering
-The results grid renders to a single `<canvas>` element via `@glideapps/glide-data-grid`. O(1) DOM complexity regardless of dataset size. No layout thrashing, GPU-accelerated paint.
+The backend retains at most **1,000,000 rows per result**, within a **256 MiB budget shared by cached results and running paged queries**. Results that reach a limit are marked **truncated**. These limits bound retained data; they do not add a SQL `LIMIT` or stop the remaining statements in a script. Narrow the query when you need rows beyond the retained result.
 
-### Parallel Processing
-Results over 50K rows use `rayon` for parallel page packing across CPU cores. Below that threshold, sequential processing wins due to cache locality.
+## Local data and credentials
 
-### Dual Connection Pool
-Each database maintains two `deadpool-postgres` pools:
-- **16 connections** for queries — user SQL, EXPLAIN, virtual pagination
-- **8 connections** for metadata — schema loading, autocomplete, activity monitoring
+Saved connections, queries and workspaces live in a local `rsql.db` database. Release builds use the operating system's application data directory; debug builds use the working directory. Open query tabs and editor contents are restored from local WebView storage. Query history is held in memory for the current session.
 
-Metadata loads never block while a long query runs, and vice versa.
-
-### Pre-Allocated String Packing
-Row packing uses a single pre-allocated `String` buffer with capacity estimation. No intermediate `Vec<String>` per row, no `.join()` chains. Separator sanitization is done inline, character by character.
-
----
-
-## Architecture
-
-```
-┌─────────────────────────────────────────────────────┐
-│  Frontend (React 19 + TypeScript)                   │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────────┐ │
-│  │  Monaco   │  │  Leaflet │  │  Glide Data Grid   │ │
-│  │  Editor   │  │  Maps    │  │  (WebGL Canvas)    │ │
-│  └──────────┘  └──────────┘  └────────────────────┘ │
-│  ┌──────────┐  ┌──────────┐  ┌────────────────────┐ │
-│  │  xterm.js│  │  cmdk    │  │  Zustand Stores    │ │
-│  │  Terminal │  │  Palette │  │  (State Mgmt)      │ │
-│  └──────────┘  └──────────┘  └────────────────────┘ │
-├─────────────────────────────────────────────────────┤
-│  Tauri v2 IPC  (packed binary \x1F/\x1E format)    │
-├─────────────────────────────────────────────────────┤
-│  Backend (Rust)                                     │
-│  ┌──────────────┐  ┌────────────┐  ┌─────────────┐ │
-│  │ tokio-postgres│  │  sonic-rs  │  │   rayon     │ │
-│  │ (zero-copy)  │  │  (SIMD)    │  │  (parallel) │ │
-│  └──────────────┘  └────────────┘  └─────────────┘ │
-│  ┌──────────────┐  ┌────────────┐  ┌─────────────┐ │
-│  │  deadpool    │  │   russh    │  │  libsql     │ │
-│  │  (pooling)   │  │  (SSH)     │  │  (local db) │ │
-│  └──────────────┘  └────────────┘  └─────────────┘ │
-└─────────────────────────────────────────────────────┘
-```
-
-## Tech Stack
-
-| Layer | Technology |
-|-------|-----------|
-| Frontend | React 19, TypeScript, Zustand, Tailwind CSS v4, shadcn/ui |
-| Editor | Monaco Editor with monaco-sql-languages |
-| Results Grid | @glideapps/glide-data-grid v6 (WebGL canvas) |
-| Maps | Leaflet + OpenStreetMap |
-| Terminal | xterm.js + portable-pty |
-| Backend | Rust, Tauri v2, tokio-postgres (simple_query protocol) |
-| Serialization | sonic-rs v0.5 (SIMD JSON) |
-| Parallelism | rayon v1.11 |
-| Connection Pool | deadpool-postgres v0.14 (16 query + 8 metadata) |
-| SSH | russh v0.57 (native async Rust SSH) |
-| Local Storage | libsql (SQLite — connections, queries, workspaces, page snapshots) |
-
----
-
-## Performance Numbers
-
-All numbers are verified from source code — not marketing estimates.
-
-| Metric | Value | Source |
-|--------|-------|--------|
-| Cursor fetch size | 10,000 rows/round-trip | `CURSOR_FETCH_SIZE` in common.rs |
-| Page size | 2,000 rows/page | `VITE_PAGE_SIZE` default |
-| Frontend cache window | ~24 pages in memory | results-panel.tsx |
-| Concurrent page fetches | 6 parallel requests | results-panel.tsx |
-| Query connection pool | 16 connections | deadpool config |
-| Metadata connection pool | 8 connections | deadpool config |
-| Parallel packing threshold | 50,000+ rows | rayon in common.rs |
-| IPC format | `\x1F` cell / `\x1E` row separators | common.rs |
-| Search debounce | 200ms | results-panel.tsx |
-| Grid row height | 32px | results-grid.tsx |
-| Column width | 80–400px (auto-calculated from first 100 rows) | results-grid.tsx |
-
-### vs. Competitors
-
-| | RSQL | pgAdmin | DBeaver | DataGrip | TablePlus |
-|---|---|---|---|---|---|
-| **Price** | **Free** | Free | $0/$250/yr | $229/yr | $99 |
-| **Runtime** | System WebView | Python + browser | JVM (Java 21) | JVM | Native |
-| **Binary size** | **~20 MB** | ~180 MB | ~200 MB | ~600 MB | ~40 MB |
-| **Grid tech** | **Canvas (WebGL)** | DOM table | SWT native | Swing | Native |
-| **Memory** | **~80–150 MB** | ~200–400 MB | ~500 MB–1 GB | ~700 MB–2 GB | ~100–200 MB |
-| **EXPLAIN visualizer** | Yes | Yes | Yes | Partial | No |
-| **PostGIS map** | Yes | No | Yes | No | No |
-| **Built-in terminal** | Yes | No | No | Yes | No |
-| **Command palette** | Yes | No | No | Yes | Yes |
-| **Schema diff** | Yes | No | Pro only | Yes | No |
-| **FK navigation** | Yes | No | Partial | Yes | No |
-| **Canvas grid** | **Yes** | No | No | No | No |
-| **Open source** | **Yes** | Yes | Community | No | No |
-
----
-
-## Roadmap
-
-Planned features, roughly in priority order:
-
-- [ ] **Safe mode / production guard** — color-coded connections (red=production, yellow=staging, green=dev), read-only mode for production, explicit confirm for DML/DDL
-- [ ] **AI-powered text-to-SQL** — natural language → SQL with schema context, support for OpenAI/Claude/Ollama local models (bring your own key)
-- [ ] **Inline charts** — bar, line, pie charts directly in the results panel for aggregate queries
-- [ ] **Query parameterization** — detect `$1`/`:param` placeholders, show input panel, execute with native PG parameterized queries
-- [ ] **Visual query builder** — drag tables from the schema browser, auto-generate JOINs, build WHERE clauses visually
-- [ ] **Multi-format import** — Excel (.xlsx), Parquet, JSON array import via Rust crates (calamine, arrow/parquet)
-- [ ] **Schema migration scripts** — generate runnable ALTER/CREATE migration scripts from schema diff results
-- [ ] **Backup & restore GUI** — wrapper around pg_dump/pg_restore with format selection, schema/data-only options
-- [ ] **RLS policy editor** — visual editor for Row-Level Security policies (USING/WITH CHECK expressions)
-- [ ] **Local DuckDB execution** — run SQL against CSV/Parquet files without a PostgreSQL server
-- [ ] **Vim-style navigation** — Monaco vim mode + keyboard-only grid/sidebar navigation
-- [ ] **Multi-database support** — MySQL, SQLite, Redis via the existing `drivers/` architecture
-
----
+**Database and SSH passwords are currently stored unencrypted in `rsql.db`.** Treat that file and its backups as sensitive. When older connection records are migrated to stable IDs, RSQL first creates a sibling backup named `rsql.db.<timestamp>.bak`.
 
 ## Development
 
+### Prerequisites
+
+- Node.js **24.21.0**, pinned in [`.node-version`](.node-version).
+- Yarn **1.x**.
+- Rust **1.95.0**, pinned in [`src-tauri/rust-toolchain.toml`](src-tauri/rust-toolchain.toml).
+- The [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system.
+- Access to a PostgreSQL server to use the app. CI runs integration tests against PostgreSQL **16, 17 and 18**.
+
+### Run locally
+
 ```bash
-# Install dependencies
-yarn install
-
-# Run in development mode
+git clone https://github.com/rust-dd/rsql.git
+cd rsql
+yarn install --frozen-lockfile
 yarn tauri dev
-
-# Build for production
-yarn tauri build
 ```
 
-## Release Workflow
+`yarn tauri dev` starts both Vite and the desktop app. `yarn dev` starts only the frontend server; database access requires the Tauri backend.
 
-The release workflow (`.github/workflows/release.yml`) builds release artifacts, signs updater metadata, and currently signs Windows and Linux artifacts. macOS signing/notarization is in progress.
+### Build an installer
 
-The app checks GitHub Releases for updates via `https://github.com/rust-dd/rust-sql/releases/latest/download/latest.json`, with a manual "Check for Updates" action plus a silent startup check.
+For a local build without release signing keys, disable updater artifacts:
 
-### Required Secrets
+```bash
+yarn tauri build --no-sign --config '{"bundle":{"createUpdaterArtifacts":false}}'
+```
 
-**Updater:**
-- `TAURI_UPDATER_PUBLIC_KEY` — public key from `yarn tauri signer generate`
-- `TAURI_SIGNING_PRIVATE_KEY` — private updater signing key
-- `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` (optional)
+Installers are written to `src-tauri/target/release/bundle/`. Automatic updates are disabled in builds without `TAURI_UPDATER_PUBLIC_KEY`.
 
-**Windows:**
-- `WINDOWS_CERTIFICATE` — base64-encoded `.pfx`
-- `WINDOWS_CERTIFICATE_PASSWORD`
-- `WINDOWS_TIMESTAMP_URL` (optional, defaults to `http://timestamp.digicert.com`)
+### Checks and tests
 
-**Linux:**
-- `TAURI_SIGNING_RPM_KEY` — ASCII-armored private GPG key
-- `TAURI_SIGNING_RPM_KEY_PASSPHRASE` (optional)
-- `APPIMAGETOOL_SIGN_PASSPHRASE`
-- `SIGN_KEY` (optional — GPG key id for AppImage signing)
+Run the frontend checks from the repository root:
 
-**macOS (pending):**
-- `APPLE_CERTIFICATE` — base64-encoded `.p12` Developer ID Application certificate
-- `APPLE_CERTIFICATE_PASSWORD`
-- `APPLE_SIGNING_IDENTITY`
-- Notarization: `APPLE_ID`, `APPLE_PASSWORD`, `APPLE_TEAM_ID` or `APPLE_API_KEY`, `APPLE_API_ISSUER`, `APPLE_API_KEY_P8`
+```bash
+node scripts/check-version.mjs
+yarn check:ci
+yarn typecheck
+yarn test
+yarn build
+```
 
-Push a tag like `v1.x.x` to trigger a release build.
+Run Rust checks from `src-tauri` so the pinned toolchain is used:
 
----
+```bash
+cd src-tauri
+cargo fmt --check
+cargo clippy --locked --all-targets -- -D warnings
+cargo test --locked
+```
+
+Database integration tests are ignored by default. To run them, point `RSQL_TEST_DATABASE_URL` at a disposable PostgreSQL database. From the repository root, in a Bash-compatible shell:
+
+```bash
+cd src-tauri
+export RSQL_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
+cargo test --locked --test row_mutations --test schema_index --test foreign_keys -- --ignored
+cargo test --locked --bin rsql -- --ignored
+```
+
+### Project layout
+
+| Path | Contents |
+| --- | --- |
+| [`src/`](src/) | React UI, Zustand stores, Monaco completion and Tauri client calls |
+| [`src-tauri/`](src-tauri/) | Rust backend, PostgreSQL driver, SSH tunnels and local storage |
+| [`tests/`](tests/) | Shared fixtures and browser performance harnesses |
+| [`scripts/`](scripts/) | Version checks, dependency audits and icon generation |
+| [`docs/`](docs/) | Project documentation and release setup |
+| [`website/`](website/) | Separate website with an interactive SQL demo |
+
+The desktop icon source is [`assets/app-icon.png`](assets/app-icon.png). Run `yarn icons:generate` to regenerate platform icons; see the [icon notes](assets/README.md).
+
+### Architecture
+
+The React UI talks to Rust through Tauri commands. The PostgreSQL driver uses `tokio-postgres`'s simple query protocol, preserving database values as text. Results cross the IPC boundary as packed strings and are decoded into grid pages in the frontend.
+
+Each saved connection has separate pools for user queries (up to 8 connections) and metadata (up to 4), so schema browsing does not queue behind a long query. Local persistence uses libSQL.
+
+## Contributing
+
+[Open an issue](https://github.com/rust-dd/rsql/issues) for bugs or feature requests. For bugs, include your RSQL version, operating system, PostgreSQL version and steps to reproduce, with credentials and sensitive data removed.
+
+For code changes, run the relevant checks above and describe the problem and resulting behavior in your pull request. Use a purpose-based branch name such as `fix/query-cancellation` or `feat/result-export`, and Conventional Commit subjects such as `fix: handle cancelled queries`.
+
+## Releases
+
+Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml). It verifies version consistency, runs frontend and Rust checks, builds the supported platforms, and uploads signed updater artifacts to a draft GitHub release. Publish the draft after the builds and signing checks finish. The updater endpoint is configured in [`tauri.conf.json`](src-tauri/tauri.conf.json).
+
+<details>
+<summary>Release signing configuration</summary>
+
+Configure these GitHub repository secrets before releasing:
+
+- **Updater:** `TAURI_UPDATER_PUBLIC_KEY`, `TAURI_SIGNING_PRIVATE_KEY`, and optionally `TAURI_SIGNING_PRIVATE_KEY_PASSWORD`.
+- **macOS:** `APPLE_CERTIFICATE`, `APPLE_CERTIFICATE_PASSWORD`, `APPLE_SIGNING_IDENTITY`, `APPLE_ID`, `APPLE_PASSWORD` (app-specific password) and `APPLE_TEAM_ID`. Set the repository variable `MACOS_SIGNING_ENABLED` to `true` after following the [macOS signing guide](docs/macos-release.md).
+- **Windows:** `WINDOWS_CERTIFICATE` (base64 `.pfx`), `WINDOWS_CERTIFICATE_PASSWORD`, and optionally `WINDOWS_TIMESTAMP_URL` (defaults to DigiCert).
+- **Linux:** `TAURI_SIGNING_RPM_KEY` (ASCII-armored GPG key), `APPIMAGETOOL_SIGN_PASSPHRASE`, and optionally `TAURI_SIGNING_RPM_KEY_PASSPHRASE` and `SIGN_KEY` (AppImage GPG key ID).
+
+</details>
 
 ## License
 
-Released under the [MIT License](LICENSE).
+[MIT](LICENSE) — free to use, modify and distribute.

@@ -50,6 +50,7 @@ fn main() {
             dbs::project::project_db_select,
             dbs::project::project_db_insert,
             dbs::project::project_db_delete,
+            dbs::project::project_db_set_server_alias,
             dbs::query::query_db_select,
             dbs::query::query_db_insert,
             dbs::query::query_db_delete,
