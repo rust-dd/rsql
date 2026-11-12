@@ -178,8 +178,7 @@ describe("query ownership", () => {
   it("split cancellation leaves the main execution running", async () => {
     const main = deferred<unknown>();
     const split = deferred<unknown>();
-    driver.executeVirtual.mockReturnValueOnce(main.promise);
-    driver.runQuery.mockReturnValueOnce(split.promise);
+    driver.executeVirtual.mockReturnValueOnce(main.promise).mockReturnValueOnce(split.promise);
     useTabStore.setState({ tabs: [{ ...tab(), isSplit: true, splitEditorValue: "SELECT 2" }] });
     const first = executeTabQuery();
     const second = executeTabQuery("split");
@@ -187,12 +186,46 @@ describe("query ownership", () => {
     cancelTabQuery(true);
     expect(driver.cancelQuery).toHaveBeenCalledWith(splitId);
     expect(active().isExecuting).toBe(true);
-    expect(driver.runQuery).toHaveBeenCalledWith("project", "SELECT 2", 5000, splitId);
-    split.resolve([["value"], [["old"]], 1]);
+    expect(driver.executeVirtual).toHaveBeenLastCalledWith(
+      "project",
+      "SELECT 2",
+      expect.any(String),
+      expect.any(Number),
+      5000,
+      splitId,
+    );
+    split.resolve(["value", 1, "old", 1, false]);
     main.resolve(["value", 1, "main", 1, false]);
     await Promise.all([first, second]);
     expect(active().splitResult?.status).toBe("cancelled");
     expect(active().result?.rows).toEqual([["main"]]);
+    expect(driver.runQuery).not.toHaveBeenCalled();
+  });
+
+  it("each pane pages its own large result and releases only its own", async () => {
+    driver.executeVirtual.mockResolvedValue(["value", 5000, "first", 1, true]);
+    useTabStore.setState({ tabs: [{ ...tab(), isSplit: true, splitEditorValue: "SELECT 2" }] });
+    await executeTabQuery();
+    await executeTabQuery("split");
+    const mainId = active().virtualQuery?.queryId;
+    const splitId = active().splitVirtualQuery?.queryId;
+    expect(splitId).toBe(driver.executeVirtual.mock.calls[1][2]);
+    expect(splitId).not.toBe(mainId);
+    expect(active().splitVirtualQuery?.totalRows).toBe(5000);
+    expect(active().splitResult?.capped).toBe(true);
+    expect(driver.closeVirtual).not.toHaveBeenCalled();
+
+    await executeTabQuery("split");
+    expect(driver.closeVirtual).toHaveBeenCalledExactlyOnceWith("project", splitId);
+    const rerunId = active().splitVirtualQuery?.queryId;
+    useTabStore.getState().toggleSplit(active().id);
+    expect(driver.closeVirtual).toHaveBeenLastCalledWith("project", rerunId);
+    expect(active().splitVirtualQuery).toBeUndefined();
+    expect(active().virtualQuery?.queryId).toBe(mainId);
+    expect(driver.closeVirtual).not.toHaveBeenCalledWith("project", mainId);
+
+    await executeTabQuery();
+    expect(driver.closeVirtual).toHaveBeenLastCalledWith("project", mainId);
   });
 });
 

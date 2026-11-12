@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { DriverFactory } from "@/lib/database-driver";
 import { createPageLoader } from "@/lib/page-loader";
+import type { Slot } from "@/lib/tab-resources";
 import * as virtualCache from "@/lib/virtual-cache";
 import { decodePage } from "@/lib/wire";
 import { useProjectStore } from "@/stores/project-store";
@@ -21,9 +22,10 @@ interface VirtualQuery {
 interface UseVirtualPagingArgs {
   vq: VirtualQuery | undefined;
   projectId: string | undefined;
+  slot?: Slot;
 }
 
-export function useVirtualPaging({ vq, projectId }: UseVirtualPagingArgs) {
+export function useVirtualPaging({ vq, projectId, slot = "main" }: UseVirtualPagingArgs) {
   const gridRef = useRef<{ invalidatePage: (pageIndex: number) => void }>(null);
   const [failure, setFailure] = useState<{ queryId: string; message: string } | null>(null);
   const queryId = vq?.queryId;
@@ -35,7 +37,8 @@ export function useVirtualPaging({ vq, projectId }: UseVirtualPagingArgs) {
     const isCurrent = () => {
       const state = useTabStore.getState();
       const tab = state.tabs[state.selectedTabIndex];
-      return tab?.virtualQuery?.queryId === queryId;
+      const current = slot === "split" ? tab?.splitVirtualQuery : tab?.virtualQuery;
+      return current?.queryId === queryId;
     };
     const controller = createPageLoader({
       isCurrent,
@@ -68,7 +71,7 @@ export function useVirtualPaging({ vq, projectId }: UseVirtualPagingArgs) {
       },
     });
     return controller;
-  }, [queryId, projectId, pageSize, totalRows, colCount]);
+  }, [queryId, projectId, pageSize, totalRows, colCount, slot]);
 
   useEffect(() => {
     loader.resume();
