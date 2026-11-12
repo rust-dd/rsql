@@ -202,7 +202,7 @@ export function Demo() {
                   onChange={(e) => setSql(e.target.value)}
                   onKeyDown={handleKeyDown}
                   spellCheck={false}
-                  className="w-full h-full resize-none editor-bg text-[var(--fg)] font-[var(--font-mono)] text-[13px] leading-6 p-4 focus:outline-none"
+                  className="w-full h-full resize-none editor-bg text-[var(--fg)] font-[var(--font-mono)] text-[13px] leading-6 p-4 focus:outline-hidden"
                   placeholder="Write SQL here..."
                 />
               </div>
