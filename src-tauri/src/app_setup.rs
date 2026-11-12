@@ -71,7 +71,9 @@ pub fn setup_app(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>>
             ),
             client_ssl: Arc::new(Mutex::new(BTreeMap::new())),
             local_db: db,
-            resource_monitor: Arc::new(Mutex::new(utils::ResourceMonitor::new())),
+            resource_monitor: Arc::new(Mutex::new(
+                utils::ResourceMonitor::new().expect("sysinfo supports every desktop target"),
+            )),
             virtual_cache: Arc::new(Mutex::new(crate::drivers::pgsql::VirtualCache::new())),
             notify_handles: Arc::new(Mutex::new(BTreeMap::new())),
             ssh_tunnels: Arc::new(Mutex::new(BTreeMap::new())),
