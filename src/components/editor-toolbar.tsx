@@ -1,4 +1,4 @@
-import { AlignLeft, Columns2, GitBranch, Play, Save, Square, Timer } from "lucide-react";
+import { AlignLeft, Columns2, Gauge, GitBranch, Play, Save, Square, Timer } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { format as formatSQL } from "sql-formatter";
 import { Button } from "@/components/ui/button";
@@ -27,10 +27,12 @@ const TIMEOUT_OPTIONS = [
 export function EditorToolbar({
   onExecute,
   onExplain,
+  onAnalyze,
   onCancel,
 }: {
   onExecute: () => void;
   onExplain: () => void;
+  onAnalyze: () => void;
   onCancel: () => void;
 }) {
   const activeTab = useActiveTab();
@@ -153,6 +155,17 @@ export function EditorToolbar({
           <kbd className="hidden sm:inline-flex ml-0.5 text-[10px] text-muted-foreground/60">
             {navigator.platform.includes("Mac") ? "\u2318" : "Ctrl"}+Shift+Enter
           </kbd>
+        </Button>
+        <Button
+          variant="outline"
+          size="sm"
+          className="h-7 gap-1.5 text-xs px-2"
+          onClick={onAnalyze}
+          disabled={!activeProject || !hasContent || activeTab.isExecuting}
+          title="EXPLAIN ANALYZE runs the statement to measure it, including any data changes"
+        >
+          <Gauge className="h-3.5 w-3.5" />
+          Analyze
         </Button>
         {activeTab.isExecuting ? (
           <Button

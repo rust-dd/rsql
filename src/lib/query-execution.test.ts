@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { useTabStore } from "@/stores/tab-store";
 import { ProjectConnectionStatus, type Tab } from "@/types";
+import { trackEditorSelection } from "./editor-selection";
 import { cancelTabQuery, executeTabQuery } from "./query-execution";
 
 vi.hoisted(() => {
@@ -13,9 +14,10 @@ vi.hoisted(() => {
   vi.stubGlobal("window", { localStorage: globalThis.localStorage });
 });
 
-const { driver, projectState, history } = vi.hoisted(() => ({
+const { driver, projectState, history, toastError } = vi.hoisted(() => ({
   driver: {
     executeVirtual: vi.fn(),
+    explainPlan: vi.fn(),
     runQuery: vi.fn(),
     closeVirtual: vi.fn(),
     cancelQuery: vi.fn(),
@@ -26,7 +28,9 @@ const { driver, projectState, history } = vi.hoisted(() => ({
     connect: vi.fn(),
   },
   history: vi.fn(),
+  toastError: vi.fn(),
 }));
+vi.mock("sonner", () => ({ toast: { error: toastError } }));
 vi.mock("@/lib/database-driver", () => ({ DriverFactory: { getDriver: () => driver } }));
 vi.mock("@/stores/project-store", () => ({ useProjectStore: { getState: () => projectState } }));
 vi.mock("@/stores/history-store", () => ({
@@ -157,18 +161,16 @@ describe("query ownership", () => {
   });
 
   it("passes timeout and execution ownership to EXPLAIN", async () => {
-    driver.runQuery.mockResolvedValueOnce([
-      ["QUERY PLAN"],
-      [[JSON.stringify([{ Plan: { "Node Type": "Result" } }])]],
-      1,
-    ]);
+    driver.explainPlan.mockResolvedValueOnce([{ Plan: { "Node Type": "Result" } }]);
     await executeTabQuery("explain");
-    expect(driver.runQuery).toHaveBeenCalledWith(
+    expect(driver.explainPlan).toHaveBeenCalledWith(
       "project",
-      "EXPLAIN (ANALYZE, FORMAT JSON) SELECT 1",
+      "SELECT 1",
+      false,
       5000,
       expect.any(String),
     );
+    expect(driver.runQuery).not.toHaveBeenCalled();
     expect(active().explainResult?.Plan["Node Type"]).toBe("Result");
     expect(active().isExecuting).toBe(false);
   });
@@ -191,5 +193,59 @@ describe("query ownership", () => {
     await Promise.all([first, second]);
     expect(active().splitResult?.status).toBe("cancelled");
     expect(active().result?.rows).toEqual([["main"]]);
+  });
+});
+
+describe("explain targeting", () => {
+  const plan = [{ Plan: { "Node Type": "ModifyTable" } }];
+  const script = "SELECT 1;\nDELETE FROM t;\nUPDATE t SET a = ';'";
+  let untrack: (() => void) | undefined;
+  const editor = (start: number, end = start) => {
+    untrack = trackEditorSelection("one", "main", () => ({ text: script, start, end }));
+  };
+  beforeEach(() => {
+    useTabStore.setState({ tabs: [{ ...tab(), editorValue: script }], selectedTabIndex: 0 });
+  });
+  afterEach(() => untrack?.());
+
+  it("explains only the statement at the caret, without ANALYZE", async () => {
+    driver.explainPlan.mockResolvedValueOnce(plan);
+    editor(script.indexOf("DELETE") + 2);
+    await executeTabQuery("explain");
+    expect(driver.explainPlan).toHaveBeenCalledWith(
+      "project",
+      "DELETE FROM t",
+      false,
+      5000,
+      expect.any(String),
+    );
+  });
+
+  it("analyzes the selected statement only when asked to", async () => {
+    driver.explainPlan.mockResolvedValueOnce(plan);
+    const start = script.indexOf("UPDATE");
+    editor(start, script.length);
+    await executeTabQuery("analyze");
+    expect(driver.explainPlan).toHaveBeenCalledWith(
+      "project",
+      "UPDATE t SET a = ';'",
+      true,
+      5000,
+      expect.any(String),
+    );
+  });
+
+  it.each([
+    ["a selection spanning statements", () => editor(0, script.length)],
+    ["several statements and no editor caret", () => {}],
+  ])("runs nothing for %s", async (_, setup) => {
+    setup();
+    useTabStore.setState({ tabs: [{ ...tab(), editorValue: script, result: undefined }] });
+    await executeTabQuery("explain");
+    expect(driver.explainPlan).not.toHaveBeenCalled();
+    expect(driver.runQuery).not.toHaveBeenCalled();
+    expect(toastError).toHaveBeenCalledWith(expect.stringMatching(/statements/));
+    expect(active().isExecuting).toBe(false);
+    expect(history).not.toHaveBeenCalled();
   });
 });

@@ -2,6 +2,7 @@ import { Command } from "cmdk";
 import {
   AlignLeft,
   Download,
+  Gauge,
   GitBranch,
   Moon,
   Pin,
@@ -26,6 +27,7 @@ export function ActionsGroup({
   hasQuery,
   onExecute,
   onExplain,
+  onAnalyze,
   formatQuery,
   setPage,
   theme,
@@ -41,6 +43,7 @@ export function ActionsGroup({
   hasQuery: boolean;
   onExecute: () => void;
   onExplain: () => void;
+  onAnalyze: () => void;
   formatQuery: () => void;
   setPage: (p: Page) => void;
   theme: UIState["theme"];
@@ -111,6 +114,17 @@ export function ActionsGroup({
             <span className="cmdk-detail">
               {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+Shift+Enter
             </span>
+          </Command.Item>
+          <Command.Item
+            value="Explain Analyze Query"
+            onSelect={() => {
+              onClose();
+              onAnalyze();
+            }}
+          >
+            <Gauge className="h-4 w-4 text-muted-foreground" />
+            <span>Explain Analyze Query</span>
+            <span className="cmdk-detail">executes it</span>
           </Command.Item>
           <Command.Item
             value="Cancel Query"

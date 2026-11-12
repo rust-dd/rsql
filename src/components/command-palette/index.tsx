@@ -18,12 +18,14 @@ export function CommandPalette({
   onClose,
   onExecute,
   onExplain,
+  onAnalyze,
   onCheckUpdates,
 }: {
   open: boolean;
   onClose: () => void;
   onExecute: () => void;
   onExplain: () => void;
+  onAnalyze: () => void;
   onCheckUpdates: () => void;
 }) {
   const [page, setPage] = useState<Page>("root");
@@ -245,6 +247,7 @@ export function CommandPalette({
                   hasQuery={hasQuery}
                   onExecute={onExecute}
                   onExplain={onExplain}
+                  onAnalyze={onAnalyze}
                   formatQuery={formatQuery}
                   setPage={setPage}
                   theme={theme}

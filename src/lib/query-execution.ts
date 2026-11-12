@@ -1,6 +1,9 @@
+import { toast } from "sonner";
 import { DriverFactory } from "@/lib/database-driver";
 import { changesSchema } from "@/lib/ddl-detect";
+import { editorSelection } from "@/lib/editor-selection";
 import { isQueryCancelledError, notifyQueryComplete, PAGE_SIZE } from "@/lib/query-helpers";
+import { targetStatement } from "@/lib/sql-statements";
 import { cancelExecution, releaseResult, trackExecution, trackResult } from "@/lib/tab-resources";
 import * as virtualCache from "@/lib/virtual-cache";
 import { decodeColumns, decodePage, decodeResult } from "@/lib/wire";
@@ -10,7 +13,7 @@ import { useSchemaIndexStore } from "@/stores/schema-index-store";
 import { useTabStore } from "@/stores/tab-store";
 import type { ExplainPlan, QueryResult } from "@/types";
 
-export type ExecutionMode = "query" | "explain" | "split";
+export type ExecutionMode = "query" | "explain" | "analyze" | "split";
 
 export function executionError(error: unknown, elapsed: number): QueryResult {
   const message = error instanceof Error ? error.message : String(error);
@@ -23,11 +26,23 @@ export function executionError(error: unknown, elapsed: number): QueryResult {
   };
 }
 
+/** Explain targets one statement of the main editor; an ambiguous target runs nothing. */
+function explainTarget(tabId: string, sql: string): string | undefined {
+  const editor = editorSelection(tabId, "main");
+  const target = targetStatement(editor?.text ?? sql, editor);
+  if ("statement" in target) return target.statement.text;
+  toast.error(target.error);
+  return undefined;
+}
+
 export async function executeTabQuery(mode: ExecutionMode = "query") {
   const store = useTabStore.getState();
   const tab = store.tabs[store.selectedTabIndex];
-  const sql = mode === "split" ? tab?.splitEditorValue : tab?.editorValue;
-  if (!tab?.projectId || !sql?.trim() || (mode === "split" && !tab.isSplit)) return;
+  const editorSql = mode === "split" ? tab?.splitEditorValue : tab?.editorValue;
+  if (!tab?.projectId || !editorSql?.trim() || (mode === "split" && !tab.isSplit)) return;
+  const explaining = mode === "explain" || mode === "analyze";
+  const sql = explaining ? explainTarget(tab.id, editorSql) : editorSql;
+  if (sql === undefined) return;
   const projectId = tab.projectId;
   const project = useProjectStore.getState().projects[projectId];
   if (!project) return;
@@ -73,15 +88,9 @@ export async function executeTabQuery(mode: ExecutionMode = "query") {
       store.discardEditSession(tab.id);
     }
 
-    if (mode === "explain") {
-      const [, rows] = await driver.runQuery(
-        projectId,
-        `EXPLAIN (ANALYZE, FORMAT JSON) ${sql.replace(/;\s*$/, "")}`,
-        timeout,
-        execId,
-      );
+    if (explaining) {
+      const plans = await driver.explainPlan(projectId, sql, mode === "analyze", timeout, execId);
       if (!ownsTab()) return;
-      const plans: unknown = JSON.parse(rows.map((row) => row[0]).join("\n"));
       if (!Array.isArray(plans) || !plans[0]?.Plan) throw new Error("Invalid EXPLAIN result");
       store.setExplainResult(tab.id, plans[0] as ExplainPlan);
       return;
@@ -160,7 +169,8 @@ export async function executeTabQuery(mode: ExecutionMode = "query") {
     }
     execution.finish();
     if (!retained) await release().catch((error) => console.error("Result cleanup failed:", error));
-    if (changesSchema(sql)) useSchemaIndexStore.getState().invalidateProject(projectId);
+    if (mode !== "explain" && changesSchema(sql))
+      useSchemaIndexStore.getState().invalidateProject(projectId);
   }
 }
 

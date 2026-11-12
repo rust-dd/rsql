@@ -2,7 +2,7 @@ use crate::AppState;
 use crate::common::enums::AppError;
 use crate::drivers::pgsql::{
     close_virtual, execute_query, execute_query_packed, execute_query_streamed, execute_virtual,
-    fetch_virtual_page,
+    explain_plan, fetch_virtual_page,
 };
 
 use tauri::ipc::Response;
@@ -23,6 +23,26 @@ pub async fn pgsql_run_query(
     .await?;
     let json = sonic_rs::to_string(&result).map_err(|e| AppError::QueryFailed(e.to_string()))?;
     Ok(Response::new(json))
+}
+
+#[tauri::command(rename_all = "snake_case")]
+pub async fn pgsql_explain_plan(
+    project_id: &str,
+    sql: &str,
+    analyze: bool,
+    exec_id: &str,
+    timeout_ms: Option<u32>,
+    app_state: State<'_, AppState>,
+) -> Result<Response> {
+    let plan = run_user_query(
+        &app_state,
+        project_id,
+        exec_id,
+        timeout_ms,
+        async |client| explain_plan(client, sql, analyze).await,
+    )
+    .await?;
+    Ok(Response::new(plan))
 }
 
 #[tauri::command(rename_all = "snake_case")]
