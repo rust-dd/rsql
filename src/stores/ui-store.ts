@@ -25,23 +25,24 @@ interface UIState {
   clearPinnedResult: () => void;
 }
 
+function loadTheme(): UIState["theme"] {
+  try {
+    return localStorage.getItem("rsql-theme") === "dark" ? "dark" : "light";
+  } catch {
+    return "light";
+  }
+}
+
 export const useUIStore = create<UIState>()(
-  immer((set) => ({
-    theme: "light",
+  immer((set, get) => ({
+    theme: loadTheme(),
     sidebarWidth: 280,
     editorHeight: 50,
     connectionModalOpen: false,
     pinnedResult: null,
 
     toggleTheme: () => {
-      set((s) => {
-        s.theme = s.theme === "light" ? "dark" : "light";
-        if (s.theme === "dark") {
-          document.documentElement.classList.add("dark");
-        } else {
-          document.documentElement.classList.remove("dark");
-        }
-      });
+      get().setTheme(get().theme === "light" ? "dark" : "light");
     },
 
     setTheme: (theme) => {
@@ -51,6 +52,11 @@ export const useUIStore = create<UIState>()(
         document.documentElement.classList.remove("dark");
       }
       set({ theme });
+      try {
+        localStorage.setItem("rsql-theme", theme);
+      } catch {
+        // Theme changes remain usable when storage is blocked.
+      }
     },
 
     setSidebarWidth: (delta) => {
@@ -78,3 +84,7 @@ export const useUIStore = create<UIState>()(
     clearPinnedResult: () => set({ pinnedResult: null }),
   })),
 );
+
+if (typeof document !== "undefined") {
+  document.documentElement.classList.toggle("dark", useUIStore.getState().theme === "dark");
+}

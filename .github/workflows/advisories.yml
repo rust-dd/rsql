@@ -25,10 +25,10 @@ jobs:
       matrix:
         directory: [".", website]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.revision || github.sha }}
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version-file: .node-version
       - run: yarn install --frozen-lockfile
@@ -37,7 +37,7 @@ jobs:
   rust:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           ref: ${{ inputs.revision || github.sha }}
       - uses: EmbarkStudios/cargo-deny-action@v2
