@@ -10,12 +10,17 @@ export function StatusBar() {
   const activeTab = useActiveTab();
   const projects = useProjectStore((s) => s.projects);
   const status = useProjectStore((s) => s.status);
-  const historyCount = useHistoryStore((s) => s.entries.length);
+  const history = useHistoryStore((s) => s.status);
+  const refreshHistory = useHistoryStore((s) => s.refreshStatus);
 
   const projectId = activeTab?.projectId;
   const details = projectId ? projects[projectId] : undefined;
   const connStatus = projectId ? status[projectId] : undefined;
   const [resources, setResources] = useState<SystemResourceUsage | null>(null);
+
+  useEffect(() => {
+    refreshHistory().catch((error) => console.error("Loading history status failed:", error));
+  }, [refreshHistory]);
 
   useEffect(() => {
     let cancelled = false;
@@ -124,7 +129,13 @@ export function StatusBar() {
       </div>
 
       <div className="flex items-center gap-2">
-        <span>{historyCount} queries in history</span>
+        {history && (
+          <span>
+            {history.enabled
+              ? `${history.entries.toLocaleString()} queries in history`
+              : "History off"}
+          </span>
+        )}
       </div>
     </div>
   );
