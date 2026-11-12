@@ -1,6 +1,45 @@
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* v3 mono stack and absolute line heights, so text-[Npx] children inherit px, not a ratio */
+@theme inline {
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  --text-xs--line-height: 1rem;
+  --text-sm--line-height: 1.25rem;
+  --text-base--line-height: 1.5rem;
+  --text-lg--line-height: 1.75rem;
+  --text-xl--line-height: 1.75rem;
+  --text-2xl--line-height: 2rem;
+  --text-3xl--line-height: 2.25rem;
+  --text-4xl--line-height: 2.5rem;
+}
+
+/* v3 sRGB values for the palette colors in use; v4 switched them to OKLCH */
+@theme {
+  --color-amber-300: #fcd34d;
+  --color-amber-400: #fbbf24;
+  --color-emerald-400: #34d399;
+  --color-sky-300: #7dd3fc;
+  --color-violet-400: #a78bfa;
+  --color-zinc-400: #a1a1aa;
+}
+
+/* Tailwind 3 base styles that the v4 preflight changed */
+@layer base {
+  input::placeholder,
+  textarea::placeholder {
+    color: #9ca3af;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  td,
+  th {
+    padding: 1px;
+  }
+}
 
 /* ═══════════════════════════════════════
    RSQL 2026 — editorial, restrained
@@ -89,10 +128,13 @@ body::before {
   z-index: 1;
 }
 
-*,
-*::before,
-*::after {
-  border-color: var(--border);
+/* Layered so border-[...] utilities still override it, as in v3 */
+@layer base {
+  *,
+  *::before,
+  *::after {
+    border-color: var(--border);
+  }
 }
 
 ::-webkit-scrollbar {

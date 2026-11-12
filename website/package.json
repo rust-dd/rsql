@@ -21,12 +21,11 @@
   },
   "devDependencies": {
     "@biomejs/biome": "2.5.15",
+    "@tailwindcss/vite": "^4.3.3",
     "@types/react": "^19.3.0",
     "@types/react-dom": "^19.1.0",
     "@vitejs/plugin-react": "^4.4.1",
-    "autoprefixer": "^10.6.1",
-    "postcss": "^8.5.23",
-    "tailwindcss": "^3.4.19",
+    "tailwindcss": "^4.3.3",
     "typescript": "~7.0.2",
     "vite": "^6.4.4"
   }
