@@ -54,5 +54,5 @@ pub(crate) async fn create_local_schema(conn: &Connection) -> libsql::Result<()>
         .ok(); // Ignore "column already exists" errors
     }
 
-    Ok(())
+    super::history::create_history_schema(conn).await
 }

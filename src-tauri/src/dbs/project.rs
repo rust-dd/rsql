@@ -159,6 +159,9 @@ pub async fn project_db_delete(project_id: &str, app_state: State<'_, AppState>)
     )
     .await
     .map_err(|e| AppError::DatabaseError(e.to_string()))?;
+    super::history::clear(&conn, Some(project_id))
+        .await
+        .map_err(|e| AppError::DatabaseError(e.to_string()))?;
 
     // Best-effort cleanup for in-memory connection state.
     app_state.clients.lock().await.remove(project_id);

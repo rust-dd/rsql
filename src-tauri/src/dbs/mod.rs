@@ -1,3 +1,4 @@
+pub mod history;
 pub(crate) mod migrations;
 pub mod project;
 pub(crate) mod project_ids;

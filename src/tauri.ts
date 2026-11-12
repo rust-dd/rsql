@@ -64,3 +64,69 @@ export async function pgsqlTestConnection(
 ): Promise<string> {
   return await invoke<string>("pgsql_test_connection", { key });
 }
+
+export interface HistoryRecord {
+  projectId: string;
+  database: string;
+  sql: string;
+  executedAt: number;
+  durationMs: number;
+  rowCount: number;
+  success: boolean;
+  error?: string;
+}
+
+export interface StoredHistoryEntry extends Omit<HistoryRecord, "error"> {
+  id: number;
+  sqlTruncated: boolean;
+  error: string | null;
+}
+
+export interface HistoryFilter {
+  text?: string;
+  projectId?: string;
+  database?: string;
+  success?: boolean;
+  since?: number;
+  beforeId?: number;
+  limit?: number;
+}
+
+export interface HistoryPage {
+  entries: StoredHistoryEntry[];
+  hasMore: boolean;
+}
+
+export interface HistoryStatus {
+  enabled: boolean;
+  entries: number;
+  bytes: number;
+  maxEntries: number;
+  maxAgeDays: number;
+  maxBytes: number;
+}
+
+/** Resolves to false when history recording is turned off. */
+export async function historyRecord(entry: HistoryRecord): Promise<boolean> {
+  return await invoke<boolean>("history_record", { entry });
+}
+
+export async function historySearch(filter: HistoryFilter): Promise<HistoryPage> {
+  return await invoke<HistoryPage>("history_search", { filter });
+}
+
+export async function historyDatabases(projectId?: string): Promise<string[]> {
+  return await invoke<string[]>("history_databases", { project_id: projectId ?? null });
+}
+
+export async function historyStatus(): Promise<HistoryStatus> {
+  return await invoke<HistoryStatus>("history_status");
+}
+
+export async function historySetEnabled(enabled: boolean): Promise<void> {
+  await invoke("history_set_enabled", { enabled });
+}
+
+export async function historyClear(): Promise<void> {
+  await invoke("history_clear");
+}
