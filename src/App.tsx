@@ -3,10 +3,9 @@ import { Toaster } from "sonner";
 import { EditorToolbar } from "@/components/editor-toolbar";
 import { QueryEditor } from "@/components/query-editor";
 import { ResizeHandle } from "@/components/resize-handle";
-import { ResultsGrid } from "@/components/results-grid";
 import { ResultsPanel } from "@/components/results-panel";
-import { QueryFeedback } from "@/components/results-panel/feedback";
 import { ServerSidebar } from "@/components/server-sidebar";
+import { SplitResults } from "@/components/split-results";
 import { StatusBar } from "@/components/status-bar";
 import { TabBar } from "@/components/tab-bar";
 import { TopBar } from "@/components/top-bar";
@@ -289,36 +288,7 @@ export default function App() {
                     </div>
                     <ResizeHandle direction="vertical" onResize={setEditorHeight} />
                     <div className="flex-1 min-h-0 flex flex-col">
-                      {activeTab.isSplitExecuting ? (
-                        <div className="flex-1 flex items-center justify-center text-muted-foreground">
-                          <span className="animate-spin mr-2">⏳</span> Running...
-                        </div>
-                      ) : activeTab.splitResult?.status &&
-                        activeTab.splitResult.status !== "success" ? (
-                        <QueryFeedback
-                          result={activeTab.splitResult}
-                          onRetry={() => void runSplitQuery()}
-                        />
-                      ) : activeTab.splitResult ? (
-                        <div className="flex-1 flex flex-col overflow-hidden">
-                          <div className="flex items-center gap-2 px-3 py-1 border-b border-border/30 text-xs font-mono text-muted-foreground">
-                            <span>{activeTab.splitResult.rows.length} rows</span>
-                            {activeTab.splitResult.time > 0 && (
-                              <span>· {activeTab.splitResult.time.toFixed(1)}ms</span>
-                            )}
-                          </div>
-                          <div className="flex flex-1 min-h-0 flex-col">
-                            <ResultsGrid
-                              columns={activeTab.splitResult.columns}
-                              rows={activeTab.splitResult.rows}
-                            />
-                          </div>
-                        </div>
-                      ) : (
-                        <div className="flex-1 flex items-center justify-center text-muted-foreground/40 text-sm font-mono">
-                          Run a query to see results
-                        </div>
-                      )}
+                      <SplitResults tab={activeTab} onRetry={() => void runSplitQuery()} />
                     </div>
                   </div>
                 </div>

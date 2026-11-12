@@ -2,7 +2,12 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type { EditSession } from "@/lib/mutations";
-import { cancelExecution, releaseTabEditors, releaseTabResources } from "@/lib/tab-resources";
+import {
+  cancelExecution,
+  releaseResult,
+  releaseTabEditors,
+  releaseTabResources,
+} from "@/lib/tab-resources";
 import type { CellValue } from "@/lib/wire";
 import type { ExplainPlan, QueryResult, Tab, VirtualQuery } from "@/types";
 import { persistTabs, restoreTabs } from "./tab-persistence";
@@ -42,6 +47,7 @@ interface TabState {
   updateSplitContent: (tabId: string, value: string) => void;
   setSplitResult: (tabId: string, result: QueryResult) => void;
   setSplitExecuting: (tabId: string, executing: boolean, execId?: string) => void;
+  setSplitVirtualQuery: (tabId: string, vq: VirtualQuery | undefined) => void;
   setQueryTimeout: (tabId: string, timeout: number) => void;
 
   startEditSession: (tabId: string, session: EditSession) => void;
@@ -245,6 +251,7 @@ export const useTabStore = create<TabState>()(
             tab.isSplitExecuting = false;
             tab.splitExecId = undefined;
             tab.splitResult = undefined;
+            tab.splitVirtualQuery = undefined;
           });
         });
       },
@@ -264,6 +271,7 @@ export const useTabStore = create<TabState>()(
       toggleSplit: (tabId) => {
         if (get().tabs.find((tab) => tab.id === tabId)?.isSplit) {
           cancelExecution(tabId, "split");
+          releaseResult(tabId, "split");
         }
         set((s) => {
           withTab(s, tabId, (tab) => {
@@ -272,6 +280,8 @@ export const useTabStore = create<TabState>()(
             if (!tab.isSplit) {
               tab.isSplitExecuting = false;
               tab.splitExecId = undefined;
+              tab.splitResult = undefined;
+              tab.splitVirtualQuery = undefined;
             }
             tab.splitEditorValue = tab.splitEditorValue ?? "";
           });
@@ -297,6 +307,12 @@ export const useTabStore = create<TabState>()(
           withTab(s, tabId, (tab) => {
             tab.isSplitExecuting = executing;
             tab.splitExecId = executing ? execId : undefined;
+          });
+        }),
+      setSplitVirtualQuery: (tabId, vq) =>
+        set((s) => {
+          withTab(s, tabId, (tab) => {
+            tab.splitVirtualQuery = vq;
           });
         }),
       setQueryTimeout: (tabId, timeout) =>

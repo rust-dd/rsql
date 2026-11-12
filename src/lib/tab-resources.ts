@@ -1,4 +1,4 @@
-type Slot = "main" | "split";
+export type Slot = "main" | "split";
 type Cleanup = () => unknown;
 
 const executions = new Map<string, { cancel: () => void }>();
@@ -40,15 +40,16 @@ export function cancelExecution(tabId: string, slot: Slot) {
   executions.get(`${tabId}:${slot}`)?.cancel();
 }
 
-export function releaseResult(tabId: string) {
-  const cleanup = results.get(tabId);
-  results.delete(tabId);
+export function releaseResult(tabId: string, slot: Slot) {
+  const key = `${tabId}:${slot}`;
+  const cleanup = results.get(key);
+  results.delete(key);
   if (cleanup) safely(cleanup);
 }
 
-export function trackResult(tabId: string, cleanup: Cleanup) {
-  releaseResult(tabId);
-  results.set(tabId, cleanup);
+export function trackResult(tabId: string, slot: Slot, cleanup: Cleanup) {
+  releaseResult(tabId, slot);
+  results.set(`${tabId}:${slot}`, cleanup);
 }
 
 export function trackTabEditor(tabId: string, slot: Slot, cleanup: Cleanup) {
@@ -67,5 +68,6 @@ export function releaseTabEditors(tabId: string) {
 export function releaseTabResources(tabId: string) {
   cancelExecution(tabId, "main");
   cancelExecution(tabId, "split");
-  releaseResult(tabId);
+  releaseResult(tabId, "main");
+  releaseResult(tabId, "split");
 }

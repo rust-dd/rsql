@@ -4,7 +4,13 @@ import { changesSchema } from "@/lib/ddl-detect";
 import { editorSelection } from "@/lib/editor-selection";
 import { isQueryCancelledError, notifyQueryComplete, PAGE_SIZE } from "@/lib/query-helpers";
 import { targetStatement } from "@/lib/sql-statements";
-import { cancelExecution, releaseResult, trackExecution, trackResult } from "@/lib/tab-resources";
+import {
+  cancelExecution,
+  releaseResult,
+  type Slot,
+  trackExecution,
+  trackResult,
+} from "@/lib/tab-resources";
 import * as virtualCache from "@/lib/virtual-cache";
 import { decodeColumns, decodePage, decodeResult } from "@/lib/wire";
 import { useHistoryStore } from "@/stores/history-store";
@@ -50,9 +56,8 @@ export async function executeTabQuery(mode: ExecutionMode = "query") {
   const driver = DriverFactory.getDriver(project.driver);
   const execId = crypto.randomUUID();
   const split = mode === "split";
-  const execution = trackExecution(tab.id, split ? "split" : "main", () =>
-    driver.cancelQuery?.(execId),
-  );
+  const slot: Slot = split ? "split" : "main";
+  const execution = trackExecution(tab.id, slot, () => driver.cancelQuery?.(execId));
   if (split) store.setSplitExecuting(tab.id, true, execId);
   else store.setExecuting(tab.id, true, execId);
   const ownsTab = () => {
@@ -81,8 +86,9 @@ export async function executeTabQuery(mode: ExecutionMode = "query") {
     }
     if (!ownsTab()) return;
     const timeout = tab.queryTimeout || undefined;
-    if (!split) {
-      releaseResult(tab.id);
+    releaseResult(tab.id, slot);
+    if (split) store.setSplitVirtualQuery(tab.id, undefined);
+    else {
       store.setVirtualQuery(tab.id, undefined);
       store.setExplainResult(tab.id, undefined);
       store.discardEditSession(tab.id);
@@ -98,7 +104,7 @@ export async function executeTabQuery(mode: ExecutionMode = "query") {
 
     let result: QueryResult;
     let rowCount: number;
-    if (!split && driver.executeVirtual) {
+    if (driver.executeVirtual) {
       queryId = crypto.randomUUID();
       const [header, totalRows, packed, time, capped] = await driver.executeVirtual(
         projectId,
@@ -115,16 +121,18 @@ export async function executeTabQuery(mode: ExecutionMode = "query") {
       rowCount = header ? totalRows : result.rows.length;
       if (header && totalRows > PAGE_SIZE) {
         virtualCache.setPage(queryId, 0, result.rows);
-        trackResult(tab.id, release);
+        trackResult(tab.id, slot, release);
         retained = true;
-        store.setVirtualQuery(tab.id, {
+        const virtualQuery = {
           queryId,
           columns: result.columns,
           totalRows,
           pageSize: PAGE_SIZE,
           colCount: result.columns.length,
           time,
-        });
+        };
+        if (split) store.setSplitVirtualQuery(tab.id, virtualQuery);
+        else store.setVirtualQuery(tab.id, virtualQuery);
       }
     } else {
       const [columns, rows, time] = await driver.runQuery(projectId, sql, timeout, execId);
@@ -186,9 +194,12 @@ export function cancelTabQuery(split = false) {
     status: "cancelled",
     message: "Query cancelled",
   };
-  if (split) store.setSplitResult(tab.id, result);
-  else {
-    releaseResult(tab.id);
+  if (split) {
+    releaseResult(tab.id, "split");
+    store.setSplitVirtualQuery(tab.id, undefined);
+    store.setSplitResult(tab.id, result);
+  } else {
+    releaseResult(tab.id, "main");
     store.setVirtualQuery(tab.id, undefined);
     store.setExplainResult(tab.id, undefined);
     store.updateResult(tab.id, result);

@@ -54,6 +54,7 @@ export interface Tab {
   isSplit?: boolean;
   splitEditorValue?: string;
   splitResult?: QueryResult;
+  splitVirtualQuery?: VirtualQuery;
   isSplitExecuting?: boolean;
   splitExecId?: string;
   /** Pending inline row edits. Lives on the tab so it cannot leak across tabs. */

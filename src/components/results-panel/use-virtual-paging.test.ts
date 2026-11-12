@@ -7,7 +7,7 @@ import { useVirtualPaging } from "./use-virtual-paging";
 
 const { fetchPage, selectedQuery } = vi.hoisted(() => ({
   fetchPage: vi.fn(),
-  selectedQuery: { id: "paging-test" },
+  selectedQuery: { id: "paging-test", split: "split-query" },
 }));
 
 vi.mock("@/lib/database-driver", () => ({
@@ -22,17 +22,23 @@ vi.mock("@/stores/tab-store", () => ({
   useTabStore: {
     getState: () => ({
       selectedTabIndex: 0,
-      tabs: [{ virtualQuery: { queryId: selectedQuery.id } }],
+      tabs: [
+        {
+          virtualQuery: { queryId: selectedQuery.id },
+          splitVirtualQuery: { queryId: selectedQuery.split },
+        },
+      ],
     }),
   },
 }));
 
-function pagingConsumer() {
+function pagingConsumer(slot?: "main" | "split") {
   let paging: ReturnType<typeof useVirtualPaging> | undefined;
   function Consumer() {
     paging = useVirtualPaging({
       projectId: "project",
       vq: { queryId: "paging-test", totalRows: 5, pageSize: 2, colCount: 1, time: 0 },
+      slot,
     });
     return null;
   }
@@ -44,6 +50,7 @@ function pagingConsumer() {
 beforeEach(() => {
   fetchPage.mockReset();
   selectedQuery.id = "paging-test";
+  selectedQuery.split = "split-query";
 });
 
 afterEach(() => cache.clearQuery("paging-test"));
@@ -85,5 +92,21 @@ describe("virtual page fetching", () => {
     selectedQuery.id = "another-query";
     await vi.waitFor(() => expect(fetchPage).toHaveResolved());
     expect(cache.hasPage("paging-test", 1)).toBe(false);
+  });
+
+  it("keeps pages for the split pane's own query, not the main pane's", async () => {
+    selectedQuery.id = "main-query";
+    selectedQuery.split = "paging-test";
+    fetchPage.mockResolvedValueOnce("S\x1eT");
+    pagingConsumer("split").handlePageNeeded(1);
+    await vi.waitFor(() => expect(cache.getRow("paging-test", 2, 2)).toEqual(["S"]));
+
+    fetchPage.mockResolvedValueOnce("U");
+    pagingConsumer("split").handlePageNeeded(2);
+    selectedQuery.split = "another-query";
+    await vi.waitFor(() => expect(fetchPage).toHaveBeenCalledTimes(2));
+    await vi.waitFor(() => expect(fetchPage.mock.results[1]?.type).toBe("return"));
+    await Promise.resolve();
+    expect(cache.hasPage("paging-test", 2)).toBe(false);
   });
 });
