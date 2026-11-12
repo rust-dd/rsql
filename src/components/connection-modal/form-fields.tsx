@@ -1,3 +1,4 @@
+import { SSL_MODE_LABELS, SSL_MODES, type SslMode } from "@/lib/connection-url";
 import { DRIVER_CONFIGS } from "@/lib/database-driver";
 import type { DriverType } from "@/types";
 import { Input } from "../ui/input";
@@ -6,7 +7,7 @@ import { Label } from "../ui/label";
 interface ConnStringFieldProps {
   value: string;
   onChange: (value: string) => void;
-  error: boolean;
+  error: string | null;
 }
 
 export function ConnStringField({ value, onChange, error }: ConnStringFieldProps) {
@@ -22,9 +23,7 @@ export function ConnStringField({ value, onChange, error }: ConnStringFieldProps
         placeholder="postgresql://user:password@host:5432/database"
         className={`bg-input/80 border-border/50 text-foreground font-mono text-sm rounded-lg ${error ? "border-destructive" : ""}`}
       />
-      {error && (
-        <p className="text-destructive text-[11px] font-mono">Invalid connection URL format</p>
-      )}
+      {error && <p className="text-destructive text-[11px] font-mono">{error}</p>}
       <div className="relative">
         <div className="absolute inset-0 flex items-center">
           <span className="w-full border-t border-border/30" />
@@ -186,24 +185,29 @@ export function PasswordField({ value, onChange }: PasswordFieldProps) {
   );
 }
 
-interface SslCheckboxProps {
-  checked: boolean;
-  onChange: (checked: boolean) => void;
+interface SslModeFieldProps {
+  value: SslMode;
+  onChange: (value: SslMode) => void;
 }
 
-export function SslCheckbox({ checked, onChange }: SslCheckboxProps) {
+export function SslModeField({ value, onChange }: SslModeFieldProps) {
   return (
-    <div className="flex items-center gap-2">
-      <input
-        type="checkbox"
-        id="ssl"
-        checked={checked}
-        onChange={(e) => onChange(e.target.checked)}
-        className="h-4 w-4 rounded border-border bg-input"
-      />
-      <Label htmlFor="ssl" className="font-mono text-xs text-foreground cursor-pointer">
-        Use SSL
+    <div className="space-y-2">
+      <Label htmlFor="sslmode" className="font-mono text-xs text-foreground">
+        SSL mode
       </Label>
+      <select
+        id="sslmode"
+        value={value}
+        onChange={(e) => onChange(e.target.value as SslMode)}
+        className="h-9 w-full rounded-lg border border-border/50 bg-input/80 px-3 font-mono text-sm text-foreground outline-none focus:border-border"
+      >
+        {SSL_MODES.map((mode) => (
+          <option key={mode} value={mode}>
+            {SSL_MODE_LABELS[mode]}
+          </option>
+        ))}
+      </select>
     </div>
   );
 }

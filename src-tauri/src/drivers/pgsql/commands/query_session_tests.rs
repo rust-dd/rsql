@@ -10,6 +10,7 @@ use tracing_subscriber::util::SubscriberInitExt;
 use super::super::pool_connection::create_pg_pool;
 use super::run_on_client;
 use crate::common::enums::query_failed;
+use crate::drivers::pgsql::tls::PgSslMode;
 
 #[derive(Clone, Default)]
 struct QueryLog(Arc<Mutex<Vec<u8>>>);
@@ -58,7 +59,7 @@ fn pool() -> deadpool_postgres::Pool {
         .expect("set RSQL_TEST_DATABASE_URL")
         .parse::<Config>()
         .unwrap();
-    create_pg_pool(&config, false, 2).unwrap()
+    create_pg_pool(&config, PgSslMode::Disable, 2).unwrap()
 }
 
 #[tokio::test]
@@ -90,7 +91,7 @@ async fn cleanup_is_quiet_keeps_the_connection_and_resets_its_settings() {
             pool.get().await.unwrap(),
             1000,
             &mut cancellation,
-            false,
+            PgSslMode::Disable,
             async |client| client.batch_execute(sql).await.map_err(query_failed),
         )
         .await;
@@ -161,7 +162,7 @@ async fn timeouts_and_aborted_transactions_do_not_leak_to_the_next_query() {
         pool.get().await.unwrap(),
         25,
         &mut cancellation,
-        false,
+        PgSslMode::Disable,
         async |client| {
             client
                 .batch_execute("BEGIN; SELECT pg_sleep(5)")
@@ -180,7 +181,7 @@ async fn timeouts_and_aborted_transactions_do_not_leak_to_the_next_query() {
         pool.get().await.unwrap(),
         0,
         &mut cancellation,
-        false,
+        PgSslMode::Disable,
         async |client| {
             let row = client
                 .query_one("SELECT current_setting('statement_timeout')", &[])
@@ -202,10 +203,16 @@ async fn an_invalid_session_cannot_run_sql_without_its_timeout() {
     client.batch_execute("BEGIN; SELECT 1/0").await.unwrap_err();
     let (_sender, mut cancellation) = watch::channel(false);
     let ran = Arc::new(AtomicBool::new(false));
-    let result = run_on_client(client, 25, &mut cancellation, false, async |_client| {
-        ran.store(true, Ordering::SeqCst);
-        Ok(())
-    })
+    let result = run_on_client(
+        client,
+        25,
+        &mut cancellation,
+        PgSslMode::Disable,
+        async |_client| {
+            ran.store(true, Ordering::SeqCst);
+            Ok(())
+        },
+    )
     .await;
     assert!(result.is_err());
     assert!(!ran.load(Ordering::SeqCst));
@@ -231,13 +238,19 @@ async fn cancelling_one_query_preserves_other_queries_and_discards_its_connectio
         .get::<_, i32>(0);
     let (sender, mut cancellation) = watch::channel(false);
     let (started, ready) = tokio::sync::oneshot::channel();
-    let query = run_on_client(client, 0, &mut cancellation, false, async |client| {
-        let _ = started.send(());
-        client
-            .batch_execute("SELECT pg_sleep(5)")
-            .await
-            .map_err(query_failed)
-    });
+    let query = run_on_client(
+        client,
+        0,
+        &mut cancellation,
+        PgSslMode::Disable,
+        async |client| {
+            let _ = started.send(());
+            client
+                .batch_execute("SELECT pg_sleep(5)")
+                .await
+                .map_err(query_failed)
+        },
+    );
     let cancel = async {
         ready.await.unwrap();
         tokio::time::sleep(Duration::from_millis(30)).await;
@@ -278,7 +291,7 @@ async fn a_failed_reset_discards_the_connection() {
         pool.get().await.unwrap(),
         25,
         &mut cancellation,
-        false,
+        PgSslMode::Disable,
         async |client| {
             client
                 .batch_execute("SELECT pg_terminate_backend(pg_backend_pid())")

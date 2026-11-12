@@ -91,7 +91,7 @@ export default function App() {
       database: string;
       host: string;
       port: string;
-      ssl: boolean;
+      ssl: string;
       sshEnabled?: boolean;
       sshHost?: string;
       sshPort?: string;
@@ -108,7 +108,7 @@ export default function App() {
         database: connection.database,
         host: connection.host,
         port: connection.port,
-        ssl: connection.ssl ? "true" : "false",
+        ssl: connection.ssl,
         sshEnabled: connection.sshEnabled ? "true" : "false",
         sshHost: connection.sshHost ?? "",
         sshPort: connection.sshPort ?? "22",

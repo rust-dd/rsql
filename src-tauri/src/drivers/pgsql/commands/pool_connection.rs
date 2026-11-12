@@ -8,9 +8,8 @@ use super::session_cleanup::reset_session;
 use crate::AppState;
 use crate::common::enums::{AppError, ProjectConnectionStatus};
 use crate::drivers::pgsql::get_pool;
+use crate::drivers::pgsql::tls::PgSslMode;
 
-use native_tls::TlsConnector;
-use postgres_native_tls::MakeTlsConnector;
 use tauri::{AppHandle, Manager, Result};
 use tokio_postgres::{Config, NoTls};
 
@@ -38,7 +37,7 @@ const POOL_WAIT: Duration = Duration::from_secs(10);
 
 pub(crate) fn create_pg_pool(
     cfg: &Config,
-    use_ssl: bool,
+    ssl: PgSslMode,
     max_size: usize,
 ) -> std::result::Result<Pool, AppError> {
     let manager_config = ManagerConfig {
@@ -49,14 +48,11 @@ pub(crate) fn create_pg_pool(
         ..Timeouts::default()
     };
 
-    let manager = if use_ssl {
-        let tls_connector = TlsConnector::builder()
-            .build()
-            .map_err(|e| AppError::ConnectionFailed(e.to_string()))?;
-        let tls = MakeTlsConnector::new(tls_connector);
-        PgManager::from_config(cfg.clone(), tls, manager_config)
-    } else {
-        PgManager::from_config(cfg.clone(), NoTls, manager_config)
+    let mut cfg = cfg.clone();
+    ssl.apply(&mut cfg);
+    let manager = match ssl.connector()? {
+        Some(tls) => PgManager::from_config(cfg, tls, manager_config),
+        None => PgManager::from_config(cfg, NoTls, manager_config),
     };
 
     // deadpool needs to know which runtime drives its timers; without this the
@@ -97,7 +93,7 @@ pub async fn pgsql_test_connection(key: [&str; 6]) -> Result<String> {
     let database = key[2];
     let host = key[3];
     let port: u16 = key[4].parse().unwrap_or(5432);
-    let use_ssl = key[5] == "true";
+    let ssl = PgSslMode::from_stored(key[5])?;
 
     let mut cfg = Config::new();
     cfg.user(user)
@@ -106,7 +102,7 @@ pub async fn pgsql_test_connection(key: [&str; 6]) -> Result<String> {
         .host(host)
         .port(port);
 
-    let pool = create_pg_pool(&cfg, use_ssl, 1)?;
+    let pool = create_pg_pool(&cfg, ssl, 1)?;
     let client = pool
         .get()
         .await
@@ -136,14 +132,14 @@ pub async fn pgsql_connector(
         }
     }
 
-    let (user, password, database, host, port_str, use_ssl) = match key {
+    let (user, password, database, host, port_str, ssl) = match key {
         Some(key) => (
             key[0].to_string(),
             key[1].to_string(),
             key[2].to_string(),
             key[3].to_string(),
             key[4].to_string(),
-            key[5] == "true",
+            PgSslMode::from_stored(key[5])?,
         ),
         None => {
             let conn = app_state
@@ -168,7 +164,7 @@ pub async fn pgsql_connector(
                 row.get::<String>(2).unwrap_or_default(),
                 row.get::<String>(3).unwrap_or_default(),
                 row.get::<String>(4).unwrap_or_default(),
-                row.get::<String>(5).map(|s| s == "true").unwrap_or(false),
+                PgSslMode::from_stored(&row.get::<String>(5).unwrap_or_default())?,
             )
         }
     };
@@ -247,14 +243,14 @@ pub async fn pgsql_connector(
         .host(&effective_host)
         .port(port);
 
-    let query_pool = match create_pg_pool(&cfg, use_ssl, QUERY_POOL_SIZE) {
+    let query_pool = match create_pg_pool(&cfg, ssl, QUERY_POOL_SIZE) {
         Ok(p) => Arc::new(p),
         Err(e) => {
             tracing::error!("Query pool creation failed: {:?}", e);
             return Err(AppError::ConnectionFailed(full_error_chain(&e)).into());
         }
     };
-    let meta_pool = match create_pg_pool(&cfg, use_ssl, META_POOL_SIZE) {
+    let meta_pool = match create_pg_pool(&cfg, ssl, META_POOL_SIZE) {
         Ok(p) => Arc::new(p),
         Err(e) => {
             tracing::error!("Meta pool creation failed: {:?}", e);
@@ -282,7 +278,7 @@ pub async fn pgsql_connector(
     }
     {
         let mut client_ssl = app_state.client_ssl.lock().await;
-        client_ssl.insert(project_id.to_string(), use_ssl);
+        client_ssl.insert(project_id.to_string(), ssl);
     }
 
     Ok(ProjectConnectionStatus::Connected)
@@ -298,12 +294,12 @@ mod tests {
     #[test]
     fn pools_build_with_their_timeouts_configured() {
         let cfg = Config::new();
-        assert!(create_pg_pool(&cfg, false, QUERY_POOL_SIZE).is_ok());
+        assert!(create_pg_pool(&cfg, PgSslMode::Disable, QUERY_POOL_SIZE).is_ok());
     }
 
     #[test]
     fn tls_pools_build_too() {
         let cfg = Config::new();
-        assert!(create_pg_pool(&cfg, true, META_POOL_SIZE).is_ok());
+        assert!(create_pg_pool(&cfg, PgSslMode::VerifyFull, META_POOL_SIZE).is_ok());
     }
 }

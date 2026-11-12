@@ -1,10 +1,9 @@
 use crate::AppState;
 use crate::common::enums::{AppError, query_failed};
 use crate::drivers::pgsql::discover_notify_channels;
+use crate::drivers::pgsql::tls::PgSslMode;
 
 use futures_util::StreamExt;
-use native_tls::TlsConnector;
-use postgres_native_tls::MakeTlsConnector;
 use tauri::{AppHandle, Emitter, Manager, Result, State};
 use tokio_postgres::{AsyncMessage, Config, NoTls};
 
@@ -23,7 +22,7 @@ pub async fn pgsql_listen_start(project_id: &str, channel: &str, app: AppHandle)
         }
     }
 
-    let (cfg, use_ssl) = {
+    let (cfg, ssl) = {
         let conn = app_state
             .local_db
             .connect()
@@ -53,8 +52,9 @@ pub async fn pgsql_listen_start(project_id: &str, channel: &str, app: AppHandle)
                     .parse()
                     .unwrap_or(5432),
             );
-        let ssl = row.get::<String>(5).map(|s| s == "true").unwrap_or(false);
-        (cfg, ssl)
+        let ssl = PgSslMode::from_stored(&row.get::<String>(5).unwrap_or_default())?;
+        ssl.apply(&mut cfg);
+        (cfg, ssl.connector()?)
     };
 
     let channel_owned = channel.to_string();
@@ -100,15 +100,7 @@ pub async fn pgsql_listen_start(project_id: &str, channel: &str, app: AppHandle)
             drop(client);
         }
 
-        if use_ssl {
-            let tls_connector = match TlsConnector::builder().build() {
-                Ok(c) => c,
-                Err(e) => {
-                    tracing::error!("LISTEN TLS error: {:?}", e);
-                    return;
-                }
-            };
-            let tls = MakeTlsConnector::new(tls_connector);
+        if let Some(tls) = ssl {
             match cfg.connect(tls).await {
                 Ok((client, connection)) => {
                     listen_loop(client, connection, &channel_owned, &event_name, &app).await;

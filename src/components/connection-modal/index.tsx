@@ -1,6 +1,7 @@
 import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
+import { parseConnectionUrl, type SslMode, storedSslMode } from "@/lib/connection-url";
 import { pgsqlTestConnection } from "@/tauri";
 import type { DriverType, ProjectDetails } from "@/types";
 import { Button } from "../ui/button";
@@ -12,7 +13,7 @@ import {
   HostPortFields,
   NameField,
   PasswordField,
-  SslCheckbox,
+  SslModeField,
   UsernameField,
 } from "./form-fields";
 import { SshConfig } from "./ssh-config";
@@ -33,7 +34,7 @@ export interface ConnectionConfig {
   database: string;
   username: string;
   password: string;
-  ssl: boolean;
+  ssl: SslMode;
   sshEnabled: boolean;
   sshHost: string;
   sshPort: string;
@@ -50,7 +51,7 @@ export const defaultForm: Omit<ConnectionConfig, "id"> = {
   database: "",
   username: "",
   password: "",
-  ssl: false,
+  ssl: "prefer",
   sshEnabled: false,
   sshHost: "",
   sshPort: "22",
@@ -58,31 +59,6 @@ export const defaultForm: Omit<ConnectionConfig, "id"> = {
   sshPassword: "",
   sshKeyPath: "",
 };
-
-function parseConnectionString(url: string): Partial<Omit<ConnectionConfig, "id">> | null {
-  try {
-    // Handle postgresql:// and postgres:// schemes
-    const normalized = url.trim().replace(/^postgres:\/\//, "postgresql://");
-    if (!normalized.startsWith("postgresql://")) return null;
-    const parsed = new URL(normalized);
-    const params = parsed.searchParams;
-    const ssl =
-      params.get("sslmode") === "require" ||
-      params.get("sslmode") === "verify-full" ||
-      params.get("ssl") === "true";
-    return {
-      driver: "PGSQL",
-      host: parsed.hostname || "localhost",
-      port: parsed.port || "5432",
-      database: parsed.pathname.replace(/^\//, "") || "",
-      username: decodeURIComponent(parsed.username || ""),
-      password: decodeURIComponent(parsed.password || ""),
-      ssl,
-    };
-  } catch {
-    return null;
-  }
-}
 
 /** An edited connection keeps its key, so renaming never orphans its tabs or saved queries. */
 export function buildConnection(
@@ -96,7 +72,7 @@ export function buildConnection(
 export function ConnectionModal({ open, onOpenChange, onSave, editData }: ConnectionModalProps) {
   const [formData, setFormData] = useState<Omit<ConnectionConfig, "id">>(defaultForm);
   const [connString, setConnString] = useState("");
-  const [connStringError, setConnStringError] = useState(false);
+  const [connStringError, setConnStringError] = useState<string | null>(null);
   const [testing, setTesting] = useState(false);
   const [testResult, setTestResult] = useState<{ ok: boolean; message: string } | null>(null);
 
@@ -110,7 +86,7 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
         database: editData.details.database,
         username: editData.details.username,
         password: editData.details.password,
-        ssl: editData.details.ssl === "true",
+        ssl: storedSslMode(editData.details.ssl),
         sshEnabled: editData.details.sshEnabled === "true",
         sshHost: editData.details.sshHost || "",
         sshPort: editData.details.sshPort || "22",
@@ -119,26 +95,27 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
         sshKeyPath: editData.details.sshKeyPath || "",
       });
       setConnString("");
-      setConnStringError(false);
+      setConnStringError(null);
       setTestResult(null);
     } else if (open && !editData) {
       setFormData(defaultForm);
       setConnString("");
-      setConnStringError(false);
+      setConnStringError(null);
       setTestResult(null);
     }
   }, [open, editData]);
 
   const handleConnStringPaste = (value: string) => {
     setConnString(value);
-    setConnStringError(false);
+    setConnStringError(null);
     if (!value.trim()) return;
-    const parsed = parseConnectionString(value);
-    if (parsed) {
-      setFormData((prev) => ({ ...prev, ...parsed, name: prev.name || parsed.database || "" }));
-    } else {
-      setConnStringError(true);
+    const parsed = parseConnectionUrl(value);
+    if ("error" in parsed) {
+      setConnStringError(parsed.error);
+      return;
     }
+    const { value: url } = parsed;
+    setFormData((prev) => ({ ...prev, ...url, driver: "PGSQL", name: prev.name || url.database }));
   };
 
   const isEditing = !!editData;
@@ -153,7 +130,7 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
         formData.database,
         formData.host,
         formData.port,
-        formData.ssl ? "true" : "false",
+        formData.ssl,
       ];
       const version = await pgsqlTestConnection(key);
       setTestResult({ ok: true, message: version });
@@ -220,9 +197,9 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
             onChange={(value) => setFormData({ ...formData, password: value })}
           />
 
-          <SslCheckbox
-            checked={formData.ssl}
-            onChange={(checked) => setFormData({ ...formData, ssl: checked })}
+          <SslModeField
+            value={formData.ssl}
+            onChange={(ssl) => setFormData({ ...formData, ssl })}
           />
 
           <SshConfig
