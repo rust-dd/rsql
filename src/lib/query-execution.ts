@@ -3,7 +3,7 @@ import { DriverFactory } from "@/lib/database-driver";
 import { changesSchema } from "@/lib/ddl-detect";
 import { editorSelection } from "@/lib/editor-selection";
 import { isQueryCancelledError, notifyQueryComplete, PAGE_SIZE } from "@/lib/query-helpers";
-import { targetStatement } from "@/lib/sql-statements";
+import { runTarget, targetStatement } from "@/lib/sql-statements";
 import {
   cancelExecution,
   releaseResult,
@@ -20,6 +20,8 @@ import { useTabStore } from "@/stores/tab-store";
 import type { ExplainPlan, QueryResult } from "@/types";
 
 export type ExecutionMode = "query" | "explain" | "analyze" | "split";
+/** A statement run covers the pane's selection or caret statement; a script run covers the pane. */
+export type ExecutionScope = "statement" | "script";
 
 export function executionError(error: unknown, elapsed: number): QueryResult {
   const message = error instanceof Error ? error.message : String(error);
@@ -41,13 +43,31 @@ function explainTarget(tabId: string, sql: string): string | undefined {
   return undefined;
 }
 
-export async function executeTabQuery(mode: ExecutionMode = "query") {
+/** The selected SQL, or else the statement at the caret; an ambiguous caret runs nothing. */
+function runTargetSql(tabId: string, slot: Slot, sql: string): string | undefined {
+  const editor = editorSelection(tabId, slot);
+  const target = runTarget(editor?.text ?? sql, editor);
+  if ("statement" in target) return target.statement.text;
+  toast.error(target.error);
+  return undefined;
+}
+
+export async function executeTabQuery(
+  mode: ExecutionMode = "query",
+  scope: ExecutionScope = "statement",
+) {
   const store = useTabStore.getState();
   const tab = store.tabs[store.selectedTabIndex];
-  const editorSql = mode === "split" ? tab?.splitEditorValue : tab?.editorValue;
-  if (!tab?.projectId || !editorSql?.trim() || (mode === "split" && !tab.isSplit)) return;
+  const split = mode === "split";
+  const slot: Slot = split ? "split" : "main";
+  const editorSql = split ? tab?.splitEditorValue : tab?.editorValue;
+  if (!tab?.projectId || !editorSql?.trim() || (split && !tab.isSplit)) return;
   const explaining = mode === "explain" || mode === "analyze";
-  const sql = explaining ? explainTarget(tab.id, editorSql) : editorSql;
+  const sql = explaining
+    ? explainTarget(tab.id, editorSql)
+    : scope === "script"
+      ? editorSql
+      : runTargetSql(tab.id, slot, editorSql);
   if (sql === undefined) return;
   const projectId = tab.projectId;
   const project = useProjectStore.getState().projects[projectId];
@@ -55,8 +75,6 @@ export async function executeTabQuery(mode: ExecutionMode = "query") {
 
   const driver = DriverFactory.getDriver(project.driver);
   const execId = crypto.randomUUID();
-  const split = mode === "split";
-  const slot: Slot = split ? "split" : "main";
   const execution = trackExecution(tab.id, slot, () => driver.cancelQuery?.(execId));
   if (split) store.setSplitExecuting(tab.id, true, execId);
   else store.setExecuting(tab.id, true, execId);

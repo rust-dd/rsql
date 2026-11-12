@@ -7,9 +7,11 @@ interface UseQueryLifecycleArgs {
 }
 
 const runQuery = () => executeTabQuery();
+const runScript = () => executeTabQuery("query", "script");
 const runExplain = () => executeTabQuery("explain");
 const runAnalyze = () => executeTabQuery("analyze");
 const runSplitQuery = () => executeTabQuery("split");
+const runSplitScript = () => executeTabQuery("split", "script");
 const cancelQuery = () => cancelTabQuery();
 const cancelSplitQuery = () => cancelTabQuery(true);
 
@@ -45,5 +47,14 @@ export function useQueryLifecycle({ setCommandPaletteOpen }: UseQueryLifecycleAr
     return () => window.removeEventListener("keydown", handler);
   }, [setCommandPaletteOpen]);
 
-  return { runQuery, runExplain, runAnalyze, cancelQuery, runSplitQuery, cancelSplitQuery };
+  return {
+    runQuery,
+    runScript,
+    runExplain,
+    runAnalyze,
+    cancelQuery,
+    runSplitQuery,
+    runSplitScript,
+    cancelSplitQuery,
+  };
 }

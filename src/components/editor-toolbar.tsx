@@ -1,4 +1,14 @@
-import { AlignLeft, Columns2, Gauge, GitBranch, Play, Save, Square, Timer } from "lucide-react";
+import {
+  AlignLeft,
+  Columns2,
+  Gauge,
+  GitBranch,
+  ListOrdered,
+  Play,
+  Save,
+  Square,
+  Timer,
+} from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { format as formatSQL } from "sql-formatter";
 import { Button } from "@/components/ui/button";
@@ -10,6 +20,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { RUN_LABELS, useRunScope } from "@/stores/editor-scope-store";
 import { useProjectStore } from "@/stores/project-store";
 import { useQueryStore } from "@/stores/query-store";
 import { tabIdAt, useActiveTab, useActiveTabId, useTabStore } from "@/stores/tab-store";
@@ -26,11 +37,13 @@ const TIMEOUT_OPTIONS = [
 
 export function EditorToolbar({
   onExecute,
+  onExecuteScript,
   onExplain,
   onAnalyze,
   onCancel,
 }: {
   onExecute: () => void;
+  onExecuteScript: () => void;
   onExplain: () => void;
   onAnalyze: () => void;
   onCancel: () => void;
@@ -45,6 +58,8 @@ export function EditorToolbar({
   const saveQueryAction = useQueryStore((s) => s.saveQuery);
   const activeProject = activeTab?.projectId;
   const activeProjectDetails = activeProject ? projects[activeProject] : undefined;
+  const run = RUN_LABELS[useRunScope(activeTabId, "main")];
+  const mod = navigator.platform.includes("Mac") ? "\u2318" : "Ctrl";
 
   const [saveDialogOpen, setSaveDialogOpen] = useState(false);
   const [saveTitle, setSaveTitle] = useState("");
@@ -181,19 +196,33 @@ export function EditorToolbar({
             </kbd>
           </Button>
         ) : (
-          <Button
-            variant="gradient"
-            size="sm"
-            className="h-7 gap-1.5 text-xs px-2.5"
-            onClick={onExecute}
-            disabled={!activeProject || !hasContent}
-          >
-            <Play className="h-3.5 w-3.5" />
-            Execute
-            <kbd className="hidden sm:inline-flex ml-0.5 text-[10px] text-white/60">
-              {navigator.platform.includes("Mac") ? "\u2318" : "Ctrl"}+Enter
-            </kbd>
-          </Button>
+          <>
+            <Button
+              variant="outline"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2"
+              onClick={onExecuteScript}
+              disabled={!activeProject || !hasContent}
+              title={`Runs every statement in the editor (${mod}+${mod === "Ctrl" ? "Alt" : "\u2325"}+Enter)`}
+            >
+              <ListOrdered className="h-3.5 w-3.5" />
+              Run script
+            </Button>
+            <Button
+              variant="gradient"
+              size="sm"
+              className="h-7 gap-1.5 text-xs px-2.5"
+              onClick={onExecute}
+              disabled={!activeProject || !hasContent}
+              title={run.title}
+            >
+              <Play className="h-3.5 w-3.5" />
+              {run.label}
+              <kbd className="hidden sm:inline-flex ml-0.5 text-[10px] text-white/60">
+                {mod}+Enter
+              </kbd>
+            </Button>
+          </>
         )}
       </div>
 

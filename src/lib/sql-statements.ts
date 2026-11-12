@@ -153,14 +153,37 @@ export function targetStatement(sql: string, selection?: TextSelection): Stateme
       },
     };
   }
+  return statementAtCaret(sql, selection?.start, "Place the cursor in one or select it.");
+}
+
+/** What Run executes: the selected SQL as written, or else the statement at the caret. */
+export function runTarget(sql: string, selection?: TextSelection): StatementTarget {
+  if (selection && selection.start !== selection.end) {
+    const from = Math.min(selection.start, selection.end);
+    const selected = sql.slice(from, Math.max(selection.start, selection.end));
+    if (splitStatements(selected).length === 0) {
+      return { error: "The selection contains no SQL statement." };
+    }
+    const start = from + selected.length - selected.trimStart().length;
+    const text = selected.trim();
+    return { statement: { text, start, end: start + text.length } };
+  }
+  return statementAtCaret(
+    sql,
+    selection?.start,
+    "Place the cursor in one, select the SQL to run, or use Run script.",
+  );
+}
+
+function statementAtCaret(sql: string, caret: number | undefined, hint: string): StatementTarget {
   const statements = splitStatements(sql);
   if (statements.length === 0) return { error: "There is no SQL statement to run." };
   if (statements.length === 1) return { statement: statements[0] };
-  const caret = selection?.start ?? -1;
+  const at = caret ?? -1;
   const atCaret = statements.find(
-    (s) => s.start <= caret && caret <= (s.terminator === undefined ? s.end : s.terminator + 1),
+    (s) => s.start <= at && at <= (s.terminator === undefined ? s.end : s.terminator + 1),
   );
   return atCaret
     ? { statement: atCaret }
-    : { error: "The editor contains several statements. Place the cursor in one or select it." };
+    : { error: `The editor contains several statements. ${hint}` };
 }

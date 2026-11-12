@@ -6,6 +6,7 @@ import { ResizeHandle } from "@/components/resize-handle";
 import { ResultsPanel } from "@/components/results-panel";
 import { ServerSidebar } from "@/components/server-sidebar";
 import { SplitResults } from "@/components/split-results";
+import { SplitRunBar } from "@/components/split-run-bar";
 import { StatusBar } from "@/components/status-bar";
 import { TabBar } from "@/components/tab-bar";
 import { TopBar } from "@/components/top-bar";
@@ -76,10 +77,16 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   useAppStartup();
-  const { runQuery, runExplain, runAnalyze, cancelQuery, runSplitQuery, cancelSplitQuery } =
-    useQueryLifecycle({
-      setCommandPaletteOpen,
-    });
+  const {
+    runQuery,
+    runScript,
+    runExplain,
+    runAnalyze,
+    cancelQuery,
+    runSplitQuery,
+    runSplitScript,
+    cancelSplitQuery,
+  } = useQueryLifecycle({ setCommandPaletteOpen });
 
   const handleSaveConnection = useCallback(
     async (connection: {
@@ -232,6 +239,7 @@ export default function App() {
               <>
                 <EditorToolbar
                   onExecute={() => void runQuery()}
+                  onExecuteScript={() => void runScript()}
                   onExplain={() => void runExplain()}
                   onAnalyze={() => void runAnalyze()}
                   onCancel={() => void cancelQuery()}
@@ -248,6 +256,7 @@ export default function App() {
                         value={activeTab.editorValue}
                         onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                         onExecute={() => void runQuery()}
+                        onExecuteScript={() => void runScript()}
                         onExplain={() => void runExplain()}
                         onAnalyze={() => void runAnalyze()}
                       />
@@ -259,19 +268,12 @@ export default function App() {
                   </div>
                   {/* Right pane */}
                   <div className="flex flex-1 flex-col overflow-hidden">
-                    <div className="flex items-center justify-between border-b border-border px-3 py-1 text-xs">
-                      <span className="text-muted-foreground">Right query</span>
-                      <button
-                        type="button"
-                        onClick={() =>
-                          activeTab.isSplitExecuting ? cancelSplitQuery() : void runSplitQuery()
-                        }
-                        disabled={!activeTab.projectId || !activeTab.splitEditorValue?.trim()}
-                        className="rounded border border-border px-2 py-1 hover:bg-accent disabled:opacity-40"
-                      >
-                        {activeTab.isSplitExecuting ? "Stop right query" : "Run right query"}
-                      </button>
-                    </div>
+                    <SplitRunBar
+                      tab={activeTab}
+                      onRun={() => void runSplitQuery()}
+                      onRunScript={() => void runSplitScript()}
+                      onCancel={() => void cancelSplitQuery()}
+                    />
                     <div
                       style={{ height: `${editorHeight}%` }}
                       className="flex flex-col overflow-hidden"
@@ -284,6 +286,7 @@ export default function App() {
                           activeTabId && useTabStore.getState().updateSplitContent(activeTabId, v)
                         }
                         onExecute={() => void runSplitQuery()}
+                        onExecuteScript={() => void runSplitScript()}
                       />
                     </div>
                     <ResizeHandle direction="vertical" onResize={setEditorHeight} />
@@ -297,6 +300,7 @@ export default function App() {
               <>
                 <EditorToolbar
                   onExecute={() => void runQuery()}
+                  onExecuteScript={() => void runScript()}
                   onExplain={() => void runExplain()}
                   onAnalyze={() => void runAnalyze()}
                   onCancel={() => void cancelQuery()}
@@ -310,6 +314,7 @@ export default function App() {
                     value={activeTab?.editorValue ?? ""}
                     onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                     onExecute={() => void runQuery()}
+                    onExecuteScript={() => void runScript()}
                     onExplain={() => void runExplain()}
                     onAnalyze={() => void runAnalyze()}
                   />
@@ -341,6 +346,7 @@ export default function App() {
             open={commandPaletteOpen}
             onClose={() => setCommandPaletteOpen(false)}
             onExecute={() => void runQuery()}
+            onExecuteScript={() => void runScript()}
             onExplain={() => void runExplain()}
             onAnalyze={() => void runAnalyze()}
             onCheckUpdates={() => void checkForUpdates()}

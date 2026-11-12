@@ -17,6 +17,7 @@ export function CommandPalette({
   open,
   onClose,
   onExecute,
+  onExecuteScript,
   onExplain,
   onAnalyze,
   onCheckUpdates,
@@ -24,6 +25,7 @@ export function CommandPalette({
   open: boolean;
   onClose: () => void;
   onExecute: () => void;
+  onExecuteScript: () => void;
   onExplain: () => void;
   onAnalyze: () => void;
   onCheckUpdates: () => void;
@@ -246,6 +248,7 @@ export function CommandPalette({
                   activeProject={activeProject}
                   hasQuery={hasQuery}
                   onExecute={onExecute}
+                  onExecuteScript={onExecuteScript}
                   onExplain={onExplain}
                   onAnalyze={onAnalyze}
                   formatQuery={formatQuery}
