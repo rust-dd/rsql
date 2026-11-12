@@ -98,6 +98,31 @@ jobs:
           docker logs postgres-tls
           exit 1
 
+      - name: Start PostgreSQL with a certificate from a trusted test CA
+        run: |
+          mkdir trusted-tls
+          cd trusted-tls
+          openssl req -new -x509 -days 1 -nodes -subj "/CN=rsql test CA" \
+            -addext "basicConstraints=critical,CA:TRUE" -addext "keyUsage=critical,keyCertSign" \
+            -keyout ca.key -out ca.crt
+          openssl req -new -nodes -subj "/CN=db.internal" -keyout server.key -out server.csr
+          printf 'subjectAltName=DNS:db.internal\nextendedKeyUsage=serverAuth\n' > server.ext
+          openssl x509 -req -days 1 -in server.csr -CA ca.crt -CAkey ca.key -CAcreateserial \
+            -extfile server.ext -out server.crt
+          sudo cp ca.crt /usr/local/share/ca-certificates/rsql-test-ca.crt
+          sudo update-ca-certificates
+          sudo chown 999:999 server.key server.crt
+          sudo chmod 600 server.key
+          docker run -d --name postgres-trusted-tls -p 5434:5432 -e POSTGRES_PASSWORD=postgres \
+            -v "$PWD:/tls:ro" postgres:${{ matrix.postgres }} \
+            -c ssl=on -c ssl_cert_file=/tls/server.crt -c ssl_key_file=/tls/server.key
+          for attempt in $(seq 30); do
+            docker exec postgres-trusted-tls pg_isready -h 127.0.0.1 -U postgres && exit 0
+            sleep 2
+          done
+          docker logs postgres-trusted-tls
+          exit 1
+
       - name: Integration tests against PostgreSQL
         run: |
           cargo test --locked --test row_mutations --test schema_index --test foreign_keys -- --ignored
@@ -106,3 +131,4 @@ jobs:
         env:
           RSQL_TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/postgres
           RSQL_TEST_TLS_DATABASE_URL: postgres://postgres:postgres@localhost:5433/postgres
+          RSQL_TEST_TRUSTED_TLS_DATABASE_URL: postgres://postgres:postgres@localhost:5434/postgres

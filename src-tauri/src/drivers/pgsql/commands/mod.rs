@@ -1,4 +1,5 @@
 pub mod admin_commands;
+mod connection_route;
 pub(crate) mod executions;
 pub mod metadata_commands;
 pub mod mutation_commands;

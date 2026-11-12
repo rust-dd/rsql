@@ -4,13 +4,14 @@ use deadpool_postgres::{
     Hook, HookError, Manager as PgManager, ManagerConfig, Pool, RecyclingMethod, Runtime, Timeouts,
 };
 
+use super::connection_route::{DbTarget, SshTarget, open_route, test_connection};
 use super::session_cleanup::reset_session;
 use crate::AppState;
 use crate::common::enums::{AppError, ProjectConnectionStatus};
 use crate::drivers::pgsql::get_pool;
 use crate::drivers::pgsql::tls::PgSslMode;
 
-use tauri::{AppHandle, Manager, Result};
+use tauri::{AppHandle, Manager, Result, State};
 use tokio_postgres::{Config, NoTls};
 
 pub(crate) fn full_error_chain(e: &dyn std::error::Error) -> String {
@@ -86,35 +87,53 @@ pub(crate) async fn acquire_client(
     })
 }
 
+fn database_error(error: libsql::Error) -> AppError {
+    AppError::DatabaseError(error.to_string())
+}
+
+async fn saved_key(
+    conn: &libsql::Connection,
+    project_id: &str,
+) -> std::result::Result<[String; 6], AppError> {
+    let mut rows = conn
+        .query(
+            "SELECT username, password, database, host, port, ssl FROM projects WHERE id = ?1",
+            libsql::params![project_id],
+        )
+        .await
+        .map_err(database_error)?;
+    let row = rows
+        .next()
+        .await
+        .map_err(database_error)?
+        .ok_or_else(|| AppError::ProjectNotFound(project_id.to_string()))?;
+    Ok(std::array::from_fn(|index| {
+        row.get::<String>(index as i32).unwrap_or_default()
+    }))
+}
+
+fn db_target(key: &[String; 6]) -> DbTarget<'_> {
+    DbTarget {
+        user: &key[0],
+        password: &key[1],
+        database: &key[2],
+        host: &key[3],
+        port: key[4].parse().unwrap_or(5432),
+    }
+}
+
 #[tauri::command(rename_all = "snake_case")]
-pub async fn pgsql_test_connection(key: [&str; 6]) -> Result<String> {
-    let user = key[0];
-    let password = key[1];
-    let database = key[2];
-    let host = key[3];
-    let port: u16 = key[4].parse().unwrap_or(5432);
-    let ssl = PgSslMode::from_stored(key[5])?;
-
-    let mut cfg = Config::new();
-    cfg.user(user)
-        .password(password)
-        .dbname(database)
-        .host(host)
-        .port(port);
-
-    let pool = create_pg_pool(&cfg, ssl, 1)?;
-    let client = pool
-        .get()
-        .await
-        .map_err(|e| AppError::ConnectionFailed(full_error_chain(&e)))?;
-
-    let row = client
-        .query_one("SELECT version()", &[])
-        .await
-        .map_err(|e| AppError::ConnectionFailed(e.to_string()))?;
-
-    let version: String = row.get(0);
-    Ok(version)
+pub async fn pgsql_test_connection(
+    key: [&str; 6],
+    ssh: Option<Vec<String>>,
+    app_state: State<'_, AppState>,
+) -> Result<String> {
+    let key = key.map(str::to_string);
+    let ssl = PgSslMode::from_stored(&key[5])?;
+    let ssh = ssh.as_deref().and_then(SshTarget::from_params);
+    let local_db = app_state.local_db.connect().map_err(database_error)?;
+    let approvals = &app_state.ssh_host_keys;
+    Ok(test_connection(&local_db, approvals, &db_target(&key), ssl, ssh.as_ref()).await?)
 }
 
 #[tauri::command(rename_all = "snake_case")]
@@ -132,116 +151,23 @@ pub async fn pgsql_connector(
         }
     }
 
-    let (user, password, database, host, port_str, ssl) = match key {
-        Some(key) => (
-            key[0].to_string(),
-            key[1].to_string(),
-            key[2].to_string(),
-            key[3].to_string(),
-            key[4].to_string(),
-            PgSslMode::from_stored(key[5])?,
-        ),
-        None => {
-            let conn = app_state
-                .local_db
-                .connect()
-                .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-            let mut rows = conn
-                .query(
-                    "SELECT username, password, database, host, port, ssl FROM projects WHERE id = ?1",
-                    libsql::params![project_id],
-                )
-                .await
-                .map_err(|e| AppError::DatabaseError(e.to_string()))?;
-            let row = rows
-                .next()
-                .await
-                .map_err(|e| AppError::DatabaseError(e.to_string()))?
-                .ok_or_else(|| AppError::ProjectNotFound(project_id.to_string()))?;
-            (
-                row.get::<String>(0).unwrap_or_default(),
-                row.get::<String>(1).unwrap_or_default(),
-                row.get::<String>(2).unwrap_or_default(),
-                row.get::<String>(3).unwrap_or_default(),
-                row.get::<String>(4).unwrap_or_default(),
-                PgSslMode::from_stored(&row.get::<String>(5).unwrap_or_default())?,
-            )
-        }
+    let local_db = app_state.local_db.connect().map_err(database_error)?;
+    let key = match key {
+        Some(key) => key.map(str::to_string),
+        None => saved_key(&local_db, project_id).await?,
     };
-
-    let (effective_host, effective_port_str) = if let Some(ref ssh_params) = ssh {
-        // ssh_params: [ssh_host, ssh_port, ssh_user, ssh_password, ssh_key_path]
-        if ssh_params.len() >= 3 && !ssh_params[0].is_empty() {
-            let ssh_host = &ssh_params[0];
-            let ssh_port: u16 = ssh_params[1].parse().unwrap_or(22);
-            let ssh_user = &ssh_params[2];
-            let ssh_password = ssh_params
-                .get(3)
-                .filter(|s| !s.is_empty())
-                .map(|s| s.as_str());
-            let ssh_key_path = ssh_params
-                .get(4)
-                .filter(|s| !s.is_empty())
-                .map(|s| s.as_str());
-
-            app_state.ssh_tunnels.lock().await.remove(project_id);
-
-            let conn = app_state
-                .local_db
-                .connect()
-                .map_err(|error| AppError::DatabaseError(error.to_string()))?;
-            let expected =
-                crate::ssh::host_keys::known_fingerprint(&conn, ssh_host, ssh_port).await?;
-            let connection = crate::ssh::SshConnection {
-                host: ssh_host,
-                port: ssh_port,
-                user: ssh_user,
-                password: ssh_password,
-                key_path: ssh_key_path,
-                expected_fingerprint: expected.clone(),
-            };
-            let tunnel = match crate::ssh::start_tunnel(
-                &connection,
-                &host,
-                port_str.parse().unwrap_or(5432),
-            )
-            .await
-            {
-                Ok(tunnel) => tunnel,
-                Err(crate::ssh::TunnelError::HostKey(fingerprint)) => {
-                    let challenge = app_state
-                        .ssh_host_keys
-                        .challenge(ssh_host, ssh_port, fingerprint, expected)
-                        .await;
-                    let json = serde_json::to_string(&challenge)
-                        .map_err(|error| AppError::SerializationError(error.to_string()))?;
-                    return Err(AppError::ConnectionFailed(format!("SSH_HOST_KEY:{json}")).into());
-                }
-                Err(error) => return Err(AppError::ConnectionFailed(error.to_string()).into()),
-            };
-
-            let local_port = tunnel.local_port;
-            app_state
-                .ssh_tunnels
-                .lock()
-                .await
-                .insert(project_id.to_string(), tunnel);
-
-            ("127.0.0.1".to_string(), local_port.to_string())
-        } else {
-            (host.clone(), port_str.clone())
-        }
-    } else {
-        (host.clone(), port_str.clone())
-    };
-
-    let port: u16 = effective_port_str.parse().unwrap_or(5432);
-    let mut cfg = Config::new();
-    cfg.user(&user)
-        .password(&password)
-        .dbname(&database)
-        .host(&effective_host)
-        .port(port);
+    let ssl = PgSslMode::from_stored(&key[5])?;
+    let ssh = ssh.as_deref().and_then(SshTarget::from_params);
+    if ssh.is_some() {
+        app_state.ssh_tunnels.lock().await.remove(project_id);
+    }
+    let (cfg, tunnel) = open_route(
+        &local_db,
+        &app_state.ssh_host_keys,
+        &db_target(&key),
+        ssh.as_ref(),
+    )
+    .await?;
 
     let query_pool = match create_pg_pool(&cfg, ssl, QUERY_POOL_SIZE) {
         Ok(p) => Arc::new(p),
@@ -279,6 +205,13 @@ pub async fn pgsql_connector(
     {
         let mut client_ssl = app_state.client_ssl.lock().await;
         client_ssl.insert(project_id.to_string(), ssl);
+    }
+    if let Some(tunnel) = tunnel {
+        app_state
+            .ssh_tunnels
+            .lock()
+            .await
+            .insert(project_id.to_string(), tunnel);
     }
 
     Ok(ProjectConnectionStatus::Connected)

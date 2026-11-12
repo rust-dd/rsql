@@ -1,6 +1,7 @@
 import { toast } from "sonner";
 import type { StateCreator } from "zustand";
 import { DriverFactory } from "@/lib/database-driver";
+import { sshTunnelParams } from "@/lib/ssh-tunnel";
 import { useSchemaIndexStore } from "@/stores/schema-index-store";
 import { ProjectConnectionStatus as PCS } from "@/types";
 import { projectName } from "./core";
@@ -39,7 +40,13 @@ export const createConnectionSlice: StateCreator<
       ];
       const ssh =
         d.sshEnabled === "true"
-          ? [d.sshHost, d.sshPort || "22", d.sshUser, d.sshPassword, d.sshKeyPath]
+          ? sshTunnelParams({
+              host: d.sshHost,
+              port: d.sshPort,
+              user: d.sshUser,
+              password: d.sshPassword,
+              keyPath: d.sshKeyPath,
+            })
           : undefined;
       const st = await driver.connect(projectId, key, ssh);
       set((s) => {
