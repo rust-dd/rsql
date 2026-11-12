@@ -5,7 +5,7 @@ import * as monaco from "monaco-editor";
 import editorWorker from "monaco-editor/esm/vs/editor/editor.worker?worker";
 import pgWorker from "monaco-sql-languages/esm/languages/pgsql/pgsql.worker?worker";
 
-import "monaco-sql-languages/esm/languages/pgsql/pgsql.contribution";
+import "monaco-sql-languages/esm/languages/pgsql/pgsql.contribution.js";
 import { LanguageIdEnum } from "monaco-sql-languages/esm/common/constants.js";
 import { setupLanguageFeatures } from "monaco-sql-languages/esm/setupLanguageFeatures.js";
 import { registerCompletion } from "./completion/provider";
