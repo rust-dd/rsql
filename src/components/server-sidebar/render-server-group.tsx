@@ -21,10 +21,11 @@ import {
 import { cn } from "@/lib/utils";
 import type { ProjectDetails } from "@/types";
 import { ProjectConnectionStatus } from "@/types";
-import { I } from "./constants";
+import { DEPTH, LEAF_ICON, SECTION_ICON } from "./constants";
 import { databaseConnectionHint, serverGroupAddress, serverGroupLabel } from "./labels";
 import { renderSchemas } from "./render-schema-objects";
-import { TreeRow } from "./tree-row";
+import { SectionHeader } from "./section-header";
+import { StatusDot, TreeRow } from "./tree-row";
 import type { SidebarRenderCtx } from "./types";
 
 /**
@@ -92,7 +93,7 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
   return (
     <div key={gKey}>
       <TreeRow
-        indent={I.server}
+        depth={DEPTH.server}
         icon={<Server className="h-3.5 w-3.5 text-primary" />}
         label={serverLabel}
         bold
@@ -166,12 +167,11 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
                 {serverAddress}
               </span>
             )}
-            <div
+            <StatusDot
               className={cn(
-                "h-2 w-2 rounded-full shrink-0",
                 anyConnected && "bg-success shadow-[0_0_6px_currentColor]",
                 anyConnecting && "bg-warning shadow-[0_0_6px_currentColor]",
-                !anyConnected && !anyConnecting && "bg-muted",
+                !anyConnected && !anyConnecting && "bg-muted-foreground/30",
               )}
             />
           </span>
@@ -180,10 +180,11 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
 
       {isOpen(gKey, true) && (
         <>
-          <TreeRow
-            indent={I.cat}
-            icon={<Database className="h-3.5 w-3.5 text-muted-foreground" />}
-            label={`Databases${allDbs.length > 0 ? ` (${allDbs.length})` : ""}`}
+          <SectionHeader
+            depth={DEPTH.cat}
+            icon={<Database className={SECTION_ICON} />}
+            label="Databases"
+            count={allDbs.length > 0 ? allDbs.length : undefined}
             expanded={isOpen(dbCatKey, true)}
             onClick={() => toggle(dbCatKey)}
           />
@@ -202,12 +203,12 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
                 return (
                   <div key={dbName}>
                     <TreeRow
-                      indent={I.db}
+                      depth={DEPTH.db}
                       icon={
                         isDbConnecting ? (
                           <Loader2 className="h-3.5 w-3.5 animate-spin text-muted-foreground" />
                         ) : (
-                          <Database className="h-3.5 w-3.5 text-muted-foreground" />
+                          <Database className={SECTION_ICON} />
                         )
                       }
                       label={dbName}
@@ -293,13 +294,12 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
                               {connectionHint}
                             </span>
                           )}
-                          <div
+                          <StatusDot
                             className={cn(
-                              "h-2 w-2 rounded-full shrink-0",
                               isDbConnected && "bg-success shadow-[0_0_6px_currentColor]",
                               isDbConnecting && "bg-warning shadow-[0_0_6px_currentColor]",
                               isDbFailed && "bg-destructive shadow-[0_0_6px_currentColor]",
-                              !dbConn && "bg-muted",
+                              !dbConn && "bg-muted-foreground/30",
                             )}
                           />
                         </span>
@@ -314,8 +314,9 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
                 return (
                   <TreeRow
                     key={dbName}
-                    indent={I.db}
+                    depth={DEPTH.db}
                     icon={<Database className="h-3.5 w-3.5 text-muted-foreground/50" />}
+                    muted
                     label={dbName}
                     onClick={() => void addDatabaseToServer(pids[0], dbName, dbName)}
                     onContextMenu={(e) =>
@@ -338,9 +339,10 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
             })}
 
           <TreeRow
-            indent={I.cat}
-            icon={<Shield className="h-3.5 w-3.5 text-muted-foreground" />}
+            depth={DEPTH.cat}
+            icon={<Shield className={SECTION_ICON} />}
             label="Login/Group Roles"
+            muted
             onClick={() => {
               if (connectedPid) {
                 openRolesTab(connectedPid);
@@ -358,10 +360,11 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
             const tspData = connectedPid ? serverTablespaces[connectedPid] || [] : [];
             return (
               <>
-                <TreeRow
-                  indent={I.cat}
-                  icon={<HardDrive className="h-3.5 w-3.5 text-muted-foreground" />}
-                  label={`Tablespaces${tspData.length > 0 ? ` (${tspData.length})` : ""}`}
+                <SectionHeader
+                  depth={DEPTH.cat}
+                  icon={<HardDrive className={SECTION_ICON} />}
+                  label="Tablespaces"
+                  count={tspData.length > 0 ? tspData.length : undefined}
                   expanded={isOpen(tspCatKey)}
                   onClick={() => {
                     if (connectedPid) {
@@ -373,31 +376,22 @@ export function renderServerGroup(ctx: SidebarRenderCtx, fp: string, pids: strin
                 />
                 {isOpen(tspCatKey) &&
                   tspData.map(([name, owner, location]) => (
-                    <div
+                    <TreeRow
                       key={name}
-                      className="relative flex items-center gap-1.5 py-0.5 hover:bg-sidebar-accent rounded-sm whitespace-nowrap"
-                      style={{ paddingLeft: `${I.db}px` }}
-                      onContextMenu={(e) => {
-                        e.preventDefault();
-                        e.stopPropagation();
+                      depth={DEPTH.db}
+                      icon={<HardDrive className={LEAF_ICON} />}
+                      label={name}
+                      detail={location ? `${owner} ${location}` : owner}
+                      onContextMenu={(e) =>
                         showMenu(e, [
                           {
                             label: "Copy Name",
                             icon: <Copy className="h-3 w-3" />,
                             onClick: () => copy(name),
                           },
-                        ]);
-                      }}
-                    >
-                      <HardDrive className="h-3 w-3 shrink-0 text-muted-foreground/50" />
-                      <span className="font-mono text-[11px] text-foreground">{name}</span>
-                      <span className="font-mono text-[10px] text-muted-foreground">{owner}</span>
-                      {location && (
-                        <span className="font-mono text-[9px] text-muted-foreground/40">
-                          {location}
-                        </span>
-                      )}
-                    </div>
+                        ])
+                      }
+                    />
                   ))}
               </>
             );
