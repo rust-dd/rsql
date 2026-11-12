@@ -2,7 +2,7 @@ import { create } from "zustand";
 import { persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 import type { EditSession } from "@/lib/mutations";
-import { cancelExecution, releaseTabResources } from "@/lib/tab-resources";
+import { cancelExecution, releaseTabEditors, releaseTabResources } from "@/lib/tab-resources";
 import type { CellValue } from "@/lib/wire";
 import type { ExplainPlan, QueryResult, Tab, VirtualQuery } from "@/types";
 
@@ -150,6 +150,7 @@ export const useTabStore = create<TabState>()(
         const closing = get().tabs[index];
         if (!closing) return;
         releaseTabResources(closing.id);
+        releaseTabEditors(closing.id);
         set((s) => {
           s.tabs.splice(index, 1);
           if (s.tabs.length === 0) {
@@ -165,7 +166,10 @@ export const useTabStore = create<TabState>()(
       },
 
       closeAllTabs: () => {
-        for (const tab of get().tabs) releaseTabResources(tab.id);
+        for (const tab of get().tabs) {
+          releaseTabResources(tab.id);
+          releaseTabEditors(tab.id);
+        }
         set((s) => {
           s.tabs = [];
           s.selectedTabIndex = -1;
@@ -175,7 +179,10 @@ export const useTabStore = create<TabState>()(
       closeOtherTabs: (index) => {
         if (!get().tabs[index]) return;
         for (const [i, tab] of get().tabs.entries()) {
-          if (i !== index) releaseTabResources(tab.id);
+          if (i !== index) {
+            releaseTabResources(tab.id);
+            releaseTabEditors(tab.id);
+          }
         }
         set((s) => {
           const keep = s.tabs[index];

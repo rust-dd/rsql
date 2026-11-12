@@ -45,7 +45,12 @@ function EditorFixture() {
           Show completions
         </button>
       </div>
-      <QueryEditor value={sql} onChange={setSql} onExecute={() => setExecutions((n) => n + 1)} />
+      <QueryEditor
+        tabId="editor-fixture"
+        value={sql}
+        onChange={setSql}
+        onExecute={() => setExecutions((n) => n + 1)}
+      />
       <output className="p-3" aria-label="Executed queries">
         Executed: {executions}
       </output>
