@@ -5,6 +5,7 @@ import type { EditSession } from "@/lib/mutations";
 import { cancelExecution, releaseTabEditors, releaseTabResources } from "@/lib/tab-resources";
 import type { CellValue } from "@/lib/wire";
 import type { ExplainPlan, QueryResult, Tab, VirtualQuery } from "@/types";
+import { persistTabs, restoreTabs } from "./tab-persistence";
 
 let nextId = 1;
 function genTabId(): string {
@@ -353,40 +354,10 @@ export const useTabStore = create<TabState>()(
     })),
     {
       name: "rsql-tabs",
-      partialize: (state) => ({
-        tabs: state.tabs
-          .filter((tab) => tab.type !== "terminal" && tab.type !== "notify")
-          .map((tab) => ({
-            id: tab.id,
-            type: tab.type,
-            projectId: tab.projectId,
-            schema: tab.schema,
-            title: tab.title,
-            editorValue: tab.editorValue,
-            isExecuting: false,
-            queryTimeout: tab.queryTimeout,
-            isSplit: tab.isSplit,
-            splitEditorValue: tab.splitEditorValue,
-          })),
-        selectedTabIndex:
-          state.tabs.filter((t) => t.type !== "terminal").length === 0
-            ? -1
-            : Math.min(
-                state.selectedTabIndex,
-                state.tabs.filter((t) => t.type !== "terminal").length - 1,
-              ),
-      }),
+      partialize: (state) => persistTabs(state.tabs, state.selectedTabIndex),
       merge: (persisted: unknown, current: TabState) => {
-        const p = persisted as Partial<TabState> | undefined;
-        if (!p?.tabs || !Array.isArray(p.tabs)) return current;
-        if (p.tabs.length === 0) return { ...current, tabs: [], selectedTabIndex: -1 };
-        const validTabs = p.tabs.filter(
-          (t): t is Tab =>
-            t != null && typeof t === "object" && "id" in t && "type" in t && "title" in t,
-        );
-        if (validTabs.length === 0) return { ...current, tabs: [], selectedTabIndex: -1 };
-        const idx = Math.min(Math.max(0, p.selectedTabIndex ?? 0), validTabs.length - 1);
-        return { ...current, tabs: validTabs, selectedTabIndex: idx };
+        const restored = restoreTabs(persisted);
+        return restored ? { ...current, ...restored } : current;
       },
     },
   ),
