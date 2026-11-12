@@ -2,6 +2,8 @@ use std::sync::{Arc, Mutex};
 
 pub(crate) mod host_keys;
 #[cfg(test)]
+pub(crate) mod test_server;
+#[cfg(test)]
 mod tests;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
@@ -12,11 +14,20 @@ use russh::keys::{self, PrivateKeyWithHashAlg};
 pub struct SshTunnel {
     pub local_port: u16,
     shutdown_tx: watch::Sender<bool>,
+    accept_loop: Option<tokio::task::JoinHandle<()>>,
 }
 
 impl SshTunnel {
     pub fn stop(&self) {
         let _ = self.shutdown_tx.send(true);
+    }
+
+    /// Returns once the local listener is closed.
+    pub async fn close(mut self) {
+        self.stop();
+        if let Some(accept_loop) = self.accept_loop.take() {
+            let _ = accept_loop.await;
+        }
     }
 }
 
@@ -157,7 +168,7 @@ pub(crate) async fn start_tunnel(
     let (shutdown_tx, mut shutdown_rx) = watch::channel(false);
     let remote_host = remote_host.to_string();
 
-    tokio::spawn(async move {
+    let accept_loop = tokio::spawn(async move {
         loop {
             tokio::select! {
                 result = listener.accept() => {
@@ -185,6 +196,7 @@ pub(crate) async fn start_tunnel(
     Ok(SshTunnel {
         local_port,
         shutdown_tx,
+        accept_loop: Some(accept_loop),
     })
 }
 

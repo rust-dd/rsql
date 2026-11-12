@@ -2,6 +2,8 @@ import { CheckCircle2, Loader2, XCircle } from "lucide-react";
 import type React from "react";
 import { useEffect, useState } from "react";
 import { parseConnectionUrl, type SslMode, storedSslMode } from "@/lib/connection-url";
+import { connectWithHostKeyVerification } from "@/lib/ssh-trust";
+import { sshTunnelParams } from "@/lib/ssh-tunnel";
 import { pgsqlTestConnection } from "@/tauri";
 import type { DriverType, ProjectDetails } from "@/types";
 import { Button } from "../ui/button";
@@ -132,7 +134,16 @@ export function ConnectionModal({ open, onOpenChange, onSave, editData }: Connec
         formData.port,
         formData.ssl,
       ];
-      const version = await pgsqlTestConnection(key);
+      const ssh = formData.sshEnabled
+        ? sshTunnelParams({
+            host: formData.sshHost,
+            port: formData.sshPort,
+            user: formData.sshUser,
+            password: formData.sshPassword,
+            keyPath: formData.sshKeyPath,
+          })
+        : undefined;
+      const version = await connectWithHostKeyVerification(() => pgsqlTestConnection(key, ssh));
       setTestResult({ ok: true, message: version });
     } catch (err: unknown) {
       const msg = err instanceof Error ? err.message : String(err);
