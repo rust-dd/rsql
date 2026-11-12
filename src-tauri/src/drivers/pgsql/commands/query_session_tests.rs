@@ -64,29 +64,28 @@ fn pool() -> deadpool_postgres::Pool {
 
 #[tokio::test]
 #[ignore = "requires RSQL_TEST_DATABASE_URL"]
-async fn cleanup_is_quiet_and_preserves_user_warnings_and_session_settings() {
+async fn cleanup_is_quiet_keeps_the_connection_and_resets_its_settings() {
+    const SESSION: &str = "SELECT pg_backend_pid(), current_setting('client_min_messages'), \
+        current_setting('statement_timeout'), to_regclass('pg_temp.cleanup_probe') IS NULL";
     let log = QueryLog::default();
     let _subscriber = log.subscriber().set_default();
     let pool = pool();
-    let client = pool.get().await.unwrap();
-    client
-        .batch_execute("SET client_min_messages = warning; CREATE TEMP TABLE cleanup_probe (n int)")
-        .await
-        .unwrap();
-    let original_pid = client
-        .query_one("SELECT pg_backend_pid()", &[])
+    let baseline = pool
+        .get()
         .await
         .unwrap()
-        .get::<_, i32>(0);
-    drop(client);
+        .query_one(SESSION, &[])
+        .await
+        .unwrap();
 
     let (_sender, mut cancellation) = watch::channel(false);
     for sql in [
-        "DO $$ BEGIN RAISE WARNING 'rsql user warning'; END $$; SELECT 1",
-        "BEGIN; INSERT INTO cleanup_probe VALUES (1)",
-        "BEGIN; INSERT INTO cleanup_probe VALUES (1); SELECT 1/0",
-        "SELECT 1/0",
-        "BEGIN; SELECT 1; COMMIT",
+        "SET client_min_messages = warning; \
+         DO $$ BEGIN RAISE WARNING 'rsql user warning'; END $$; SELECT 1",
+        "CREATE TEMP TABLE cleanup_probe (n int); BEGIN; INSERT INTO cleanup_probe VALUES (1)",
+        "BEGIN; CREATE TEMP TABLE cleanup_probe (n int); SELECT 1/0",
+        "SET client_min_messages = warning; SELECT 1/0",
+        "BEGIN; SET client_min_messages = warning; CREATE TEMP TABLE cleanup_probe (n int); COMMIT",
     ] {
         let result = run_on_client(
             pool.get().await.unwrap(),
@@ -97,19 +96,17 @@ async fn cleanup_is_quiet_and_preserves_user_warnings_and_session_settings() {
         )
         .await;
         assert_eq!(result.is_err(), sql.contains("1/0"));
-        let client = pool.get().await.unwrap();
-        let row = client
-            .query_one(
-                "SELECT pg_backend_pid(), current_setting('client_min_messages'), \
-                 current_setting('statement_timeout'), (SELECT count(*) FROM cleanup_probe)",
-                &[],
-            )
+        let row = pool
+            .get()
+            .await
+            .unwrap()
+            .query_one(SESSION, &[])
             .await
             .unwrap();
-        assert_eq!(row.get::<_, i32>(0), original_pid);
-        assert_eq!(row.get::<_, String>(1), "warning");
-        assert_eq!(row.get::<_, String>(2), "0");
-        assert_eq!(row.get::<_, i64>(3), 0);
+        assert_eq!(row.get::<_, i32>(0), baseline.get::<_, i32>(0), "{sql}");
+        assert_eq!(row.get::<_, String>(1), baseline.get::<_, String>(1));
+        assert_eq!(row.get::<_, String>(2), baseline.get::<_, String>(2));
+        assert!(row.get::<_, bool>(3), "{sql}");
     }
     let output = log.assert_no_cleanup_warnings();
     assert!(output.contains("rsql user warning"), "{output}");
@@ -117,36 +114,41 @@ async fn cleanup_is_quiet_and_preserves_user_warnings_and_session_settings() {
 
 #[tokio::test]
 #[ignore = "requires RSQL_TEST_DATABASE_URL"]
-async fn pool_recycling_cleans_unfinished_transactions_without_idle_warnings() {
+async fn pool_recycling_resets_sessions_without_idle_warnings() {
+    const SESSION: &str = "SELECT current_setting('client_min_messages'), \
+        to_regclass('pg_temp.recycle_probe') IS NULL";
     let log = QueryLog::default();
     let _subscriber = log.subscriber().set_default();
     let pool = pool();
-    let client = pool.get().await.unwrap();
-    client
-        .batch_execute("SET client_min_messages = warning; CREATE TEMP TABLE recycle_probe (n int)")
+    let baseline = pool
+        .get()
         .await
-        .unwrap();
-    drop(client);
+        .unwrap()
+        .query_one(SESSION, &[])
+        .await
+        .unwrap()
+        .get::<_, String>(0);
 
     for sql in [
         "SELECT 1",
-        "BEGIN; INSERT INTO recycle_probe VALUES (1)",
-        "BEGIN; INSERT INTO recycle_probe VALUES (1); SELECT 1/0",
+        "SET client_min_messages = warning; CREATE TEMP TABLE recycle_probe (n int)",
+        "BEGIN; CREATE TEMP TABLE recycle_probe (n int); INSERT INTO recycle_probe VALUES (1)",
+        "CREATE TEMP TABLE recycle_probe (n int); BEGIN; INSERT INTO recycle_probe VALUES (1); \
+         SELECT 1/0",
     ] {
         let client = pool.get().await.unwrap();
         let result = client.batch_execute(sql).await;
         assert_eq!(result.is_err(), sql.contains("1/0"));
         drop(client);
-        let client = pool.get().await.unwrap();
-        let row = client
-            .query_one(
-                "SELECT count(*), current_setting('client_min_messages') FROM recycle_probe",
-                &[],
-            )
+        let row = pool
+            .get()
+            .await
+            .unwrap()
+            .query_one(SESSION, &[])
             .await
             .unwrap();
-        assert_eq!(row.get::<_, i64>(0), 0);
-        assert_eq!(row.get::<_, String>(1), "warning");
+        assert_eq!(row.get::<_, String>(0), baseline, "{sql}");
+        assert!(row.get::<_, bool>(1), "{sql}");
     }
     log.assert_no_cleanup_warnings();
 }
