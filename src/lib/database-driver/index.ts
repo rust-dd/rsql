@@ -83,6 +83,14 @@ export interface DatabaseDriver {
     timeoutMs?: number,
     execId?: string,
   ): Promise<WireQueryResult>;
+  /** One statement's EXPLAIN (FORMAT JSON) output; ANALYZE executes the statement. */
+  explainPlan(
+    projectId: string,
+    sql: string,
+    analyze: boolean,
+    timeoutMs?: number,
+    execId?: string,
+  ): Promise<unknown>;
   runQueryStreamed?(
     projectId: string,
     sql: string,

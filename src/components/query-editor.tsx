@@ -1,6 +1,7 @@
 import Editor, { useMonaco } from "@monaco-editor/react";
 import type * as Monaco from "monaco-editor";
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { trackEditorSelection } from "@/lib/editor-selection";
 import { trackTabEditor } from "@/lib/tab-resources";
 import { useUIStore } from "@/stores/ui-store";
 
@@ -11,6 +12,7 @@ interface QueryEditorProps {
   onChange: (value: string) => void;
   onExecute: () => void;
   onExplain?: () => void;
+  onAnalyze?: () => void;
 }
 
 export function QueryEditor({
@@ -20,14 +22,18 @@ export function QueryEditor({
   onChange,
   onExecute,
   onExplain,
+  onAnalyze,
 }: QueryEditorProps) {
   const monaco = useMonaco();
   const modelPath = `rsql://query/${encodeURIComponent(tabId)}/${slot}.sql`;
   const theme = useUIStore((s) => s.theme);
+  const [editor, setEditor] = useState<Monaco.editor.IStandaloneCodeEditor>();
   const onExecuteRef = useRef(onExecute);
   onExecuteRef.current = onExecute;
   const onExplainRef = useRef(onExplain);
   onExplainRef.current = onExplain;
+  const onAnalyzeRef = useRef(onAnalyze);
+  onAnalyzeRef.current = onAnalyze;
 
   useEffect(() => {
     if (!monaco) return;
@@ -36,8 +42,24 @@ export function QueryEditor({
     );
   }, [monaco, tabId, slot, modelPath]);
 
+  useEffect(() => {
+    if (!editor || !monaco) return;
+    const uri = monaco.Uri.parse(modelPath).toString();
+    return trackEditorSelection(tabId, slot, () => {
+      const model = editor.getModel();
+      const selection = editor.getSelection();
+      if (!model || !selection || model.uri.toString() !== uri) return undefined;
+      return {
+        text: model.getValue(),
+        start: model.getOffsetAt(selection.getStartPosition()),
+        end: model.getOffsetAt(selection.getEndPosition()),
+      };
+    });
+  }, [editor, monaco, tabId, slot, modelPath]);
+
   const handleMount = useCallback(
     (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
+      setEditor(editor);
       editor.addAction({
         id: "run-query",
         label: "Run Query",
@@ -46,9 +68,14 @@ export function QueryEditor({
       });
       editor.addAction({
         id: "explain-query",
-        label: "Explain Query",
+        label: "Explain Statement (estimated plan)",
         keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Shift | monaco.KeyCode.Enter],
         run: () => onExplainRef.current?.(),
+      });
+      editor.addAction({
+        id: "analyze-query",
+        label: "Explain Analyze Statement (executes it)",
+        run: () => onAnalyzeRef.current?.(),
       });
     },
     [],

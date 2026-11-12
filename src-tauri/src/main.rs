@@ -81,6 +81,7 @@ fn main() {
             drivers::pgsql::pgsql_load_table_stats,
             drivers::pgsql::pgsql_load_foreign_keys,
             drivers::pgsql::pgsql_run_query_packed,
+            drivers::pgsql::pgsql_explain_plan,
             drivers::pgsql::pgsql_run_query_streamed,
             drivers::pgsql::pgsql_execute_virtual,
             drivers::pgsql::pgsql_fetch_page,

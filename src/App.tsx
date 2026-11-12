@@ -77,9 +77,10 @@ export default function App() {
   const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
 
   useAppStartup();
-  const { runQuery, runExplain, cancelQuery, runSplitQuery, cancelSplitQuery } = useQueryLifecycle({
-    setCommandPaletteOpen,
-  });
+  const { runQuery, runExplain, runAnalyze, cancelQuery, runSplitQuery, cancelSplitQuery } =
+    useQueryLifecycle({
+      setCommandPaletteOpen,
+    });
 
   const handleSaveConnection = useCallback(
     async (connection: {
@@ -233,6 +234,7 @@ export default function App() {
                 <EditorToolbar
                   onExecute={() => void runQuery()}
                   onExplain={() => void runExplain()}
+                  onAnalyze={() => void runAnalyze()}
                   onCancel={() => void cancelQuery()}
                 />
                 <div className="flex flex-1 min-h-0 overflow-hidden">
@@ -248,6 +250,7 @@ export default function App() {
                         onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                         onExecute={() => void runQuery()}
                         onExplain={() => void runExplain()}
+                        onAnalyze={() => void runAnalyze()}
                       />
                     </div>
                     <ResizeHandle direction="vertical" onResize={setEditorHeight} />
@@ -325,6 +328,7 @@ export default function App() {
                 <EditorToolbar
                   onExecute={() => void runQuery()}
                   onExplain={() => void runExplain()}
+                  onAnalyze={() => void runAnalyze()}
                   onCancel={() => void cancelQuery()}
                 />
                 <div
@@ -337,6 +341,7 @@ export default function App() {
                     onChange={(v) => activeTabId && updateContent(activeTabId, v)}
                     onExecute={() => void runQuery()}
                     onExplain={() => void runExplain()}
+                    onAnalyze={() => void runAnalyze()}
                   />
                 </div>
                 <ResizeHandle direction="vertical" onResize={setEditorHeight} />
@@ -367,6 +372,7 @@ export default function App() {
             onClose={() => setCommandPaletteOpen(false)}
             onExecute={() => void runQuery()}
             onExplain={() => void runExplain()}
+            onAnalyze={() => void runAnalyze()}
             onCheckUpdates={() => void checkForUpdates()}
           />
         )}

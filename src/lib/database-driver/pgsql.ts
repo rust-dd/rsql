@@ -137,6 +137,21 @@ export class PostgreSQLDriver implements DatabaseDriver {
     });
     return unpackResult(packed, time);
   }
+  async explainPlan(
+    projectId: string,
+    sql: string,
+    analyze: boolean,
+    timeoutMs?: number,
+    execId?: string,
+  ) {
+    return invoke<unknown>("pgsql_explain_plan", {
+      project_id: projectId,
+      sql,
+      analyze,
+      exec_id: execId ?? crypto.randomUUID(),
+      timeout_ms: timeoutMs ?? null,
+    });
+  }
   async runQueryStreamed(
     projectId: string,
     sql: string,
