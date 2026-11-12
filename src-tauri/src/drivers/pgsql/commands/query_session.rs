@@ -1,8 +1,6 @@
 use std::time::Duration;
 
 use deadpool_postgres::Client;
-use native_tls::TlsConnector;
-use postgres_native_tls::MakeTlsConnector;
 use tokio::sync::watch;
 use tokio_postgres::NoTls;
 
@@ -11,6 +9,7 @@ use super::pool_connection::acquire_client;
 use super::session_cleanup::reset_session;
 use crate::AppState;
 use crate::common::enums::{AppError, query_failed};
+use crate::drivers::pgsql::tls::PgSslMode;
 
 #[cfg(test)]
 #[path = "query_session_tests.rs"]
@@ -36,17 +35,18 @@ where
         _ = wait_for_cancel(&mut execution.cancelled) => return Err(cancelled()),
         client = acquire_client(&state.clients, project_id) => client?,
     };
-    let use_ssl = *state
+    let ssl = state
         .client_ssl
         .lock()
         .await
         .get(project_id)
-        .unwrap_or(&false);
+        .copied()
+        .unwrap_or_default();
     run_on_client(
         client,
         timeout_ms.unwrap_or(0),
         &mut execution.cancelled,
-        use_ssl,
+        ssl,
         operation,
     )
     .await
@@ -56,7 +56,7 @@ pub(crate) async fn run_on_client<T, F>(
     client: Client,
     timeout_ms: u32,
     cancellation: &mut watch::Receiver<bool>,
-    use_ssl: bool,
+    ssl: PgSslMode,
     operation: F,
 ) -> Result<T, AppError>
 where
@@ -75,16 +75,9 @@ where
     let Some(result) = result else {
         let token = client.cancel_token();
         let cancel = async {
-            if use_ssl {
-                let tls = TlsConnector::builder()
-                    .build()
-                    .map_err(|error| AppError::ConnectionFailed(error.to_string()))?;
-                token
-                    .cancel_query(MakeTlsConnector::new(tls))
-                    .await
-                    .map_err(query_failed)
-            } else {
-                token.cancel_query(NoTls).await.map_err(query_failed)
+            match ssl.connector()? {
+                Some(tls) => token.cancel_query(tls).await.map_err(query_failed),
+                None => token.cancel_query(NoTls).await.map_err(query_failed),
             }
         };
         if let Err(error) = tokio::time::timeout(Duration::from_secs(5), cancel)

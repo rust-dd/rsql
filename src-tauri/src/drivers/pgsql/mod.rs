@@ -14,6 +14,9 @@ pub(crate) mod result_memory;
 pub mod roles_schema_objects;
 pub mod schema_index;
 pub mod statistics_activity;
+pub mod tls;
+#[cfg(test)]
+mod tls_tests;
 pub mod wire;
 
 pub use commands::*;

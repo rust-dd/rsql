@@ -22,7 +22,7 @@ pub struct AppState {
     /// Keyed by exec id, not project: a project can have several queries in
     /// flight and cancelling must hit the one the user asked for.
     pub(crate) executions: Arc<drivers::pgsql::commands::executions::QueryExecutions>,
-    pub client_ssl: Arc<Mutex<BTreeMap<String, bool>>>,
+    pub client_ssl: Arc<Mutex<BTreeMap<String, drivers::pgsql::tls::PgSslMode>>>,
     pub local_db: libsql::Database,
     pub resource_monitor: Arc<Mutex<utils::ResourceMonitor>>,
     pub virtual_cache: Arc<Mutex<drivers::pgsql::VirtualCache>>,
