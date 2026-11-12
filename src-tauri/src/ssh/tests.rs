@@ -24,7 +24,7 @@ impl server::Handler for TestServer {
     async fn auth_publickey(
         &mut self,
         _: &str,
-        _: &keys::PublicKey,
+        _: server::VerifiedPublicKey<'_>,
     ) -> Result<server::Auth, Self::Error> {
         self.0.fetch_add(1, Ordering::SeqCst);
         Ok(server::Auth::Accept)
