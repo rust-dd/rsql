@@ -5,6 +5,7 @@ use tokio_postgres::{Client, Config};
 use super::super::pool_connection::create_pg_pool;
 use super::super::query_session::run_on_client;
 use crate::common::enums::{AppError, query_failed};
+use crate::drivers::pgsql::tls::PgSslMode;
 
 #[derive(Debug, PartialEq)]
 struct Session {
@@ -62,7 +63,7 @@ async fn run(pool: &Pool, sql: &str, timeout_ms: u32) -> Result<(i32, Session), 
         client,
         timeout_ms,
         &mut cancellation,
-        false,
+        PgSslMode::Disable,
         async |client| {
             client.batch_execute(sql).await.map_err(query_failed)?;
             snapshot(client).await
@@ -78,7 +79,7 @@ async fn observe(pool: &Pool) -> (i32, Session) {
 #[tokio::test]
 #[ignore = "requires RSQL_TEST_DATABASE_URL"]
 async fn a_tab_cannot_inherit_another_tabs_session_state() {
-    let pool = create_pg_pool(&config(), false, 1).unwrap();
+    let pool = create_pg_pool(&config(), PgSslMode::Disable, 1).unwrap();
     let (pid, baseline) = observe(&pool).await;
 
     let (tab_a_pid, tab_a) = run(
@@ -115,7 +116,7 @@ async fn a_tab_cannot_inherit_another_tabs_session_state() {
 #[tokio::test]
 #[ignore = "requires RSQL_TEST_DATABASE_URL"]
 async fn failed_timed_out_and_unfinished_scripts_return_a_clean_session() {
-    let pool = create_pg_pool(&config(), false, 1).unwrap();
+    let pool = create_pg_pool(&config(), PgSslMode::Disable, 1).unwrap();
     let (pid, baseline) = observe(&pool).await;
 
     for (sql, timeout_ms) in [
@@ -142,7 +143,7 @@ async fn failed_timed_out_and_unfinished_scripts_return_a_clean_session() {
 #[ignore = "requires RSQL_TEST_DATABASE_URL"]
 async fn the_reset_keeps_role_defaults_configured_on_the_server() {
     const ROLE: &str = "rsql_session_defaults";
-    let admin = create_pg_pool(&config(), false, 1).unwrap();
+    let admin = create_pg_pool(&config(), PgSslMode::Disable, 1).unwrap();
     let admin = admin.get().await.unwrap();
     admin
         .batch_execute(&format!(
@@ -156,7 +157,7 @@ async fn the_reset_keeps_role_defaults_configured_on_the_server() {
 
     let mut config = config();
     config.user(ROLE).password("rsql");
-    let pool = create_pg_pool(&config, false, 1).unwrap();
+    let pool = create_pg_pool(&config, PgSslMode::Disable, 1).unwrap();
     let (_, baseline) = observe(&pool).await;
     assert_eq!(baseline.current_user, "pg_read_all_data");
     assert_eq!(baseline.search_path, "pg_catalog, public");
