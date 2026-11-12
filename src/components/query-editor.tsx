@@ -3,6 +3,7 @@ import type * as Monaco from "monaco-editor";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { trackEditorSelection } from "@/lib/editor-selection";
 import { trackTabEditor } from "@/lib/tab-resources";
+import { useEditorScopeStore } from "@/stores/editor-scope-store";
 import { useUIStore } from "@/stores/ui-store";
 
 interface QueryEditorProps {
@@ -11,6 +12,7 @@ interface QueryEditorProps {
   value: string;
   onChange: (value: string) => void;
   onExecute: () => void;
+  onExecuteScript?: () => void;
   onExplain?: () => void;
   onAnalyze?: () => void;
 }
@@ -21,6 +23,7 @@ export function QueryEditor({
   value,
   onChange,
   onExecute,
+  onExecuteScript,
   onExplain,
   onAnalyze,
 }: QueryEditorProps) {
@@ -30,6 +33,8 @@ export function QueryEditor({
   const [editor, setEditor] = useState<Monaco.editor.IStandaloneCodeEditor>();
   const onExecuteRef = useRef(onExecute);
   onExecuteRef.current = onExecute;
+  const onExecuteScriptRef = useRef(onExecuteScript);
+  onExecuteScriptRef.current = onExecuteScript;
   const onExplainRef = useRef(onExplain);
   onExplainRef.current = onExplain;
   const onAnalyzeRef = useRef(onAnalyze);
@@ -57,14 +62,33 @@ export function QueryEditor({
     });
   }, [editor, monaco, tabId, slot, modelPath]);
 
+  useEffect(() => {
+    if (!editor) return;
+    const { setScope } = useEditorScopeStore.getState();
+    const report = () =>
+      setScope(tabId, slot, editor.getSelection()?.isEmpty() === false ? "selection" : "statement");
+    report();
+    const subscription = editor.onDidChangeCursorSelection(report);
+    return () => {
+      subscription.dispose();
+      setScope(tabId, slot, undefined);
+    };
+  }, [editor, tabId, slot]);
+
   const handleMount = useCallback(
     (editor: Monaco.editor.IStandaloneCodeEditor, monaco: typeof Monaco) => {
       setEditor(editor);
       editor.addAction({
         id: "run-query",
-        label: "Run Query",
+        label: "Run Selection or Statement",
         keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyCode.Enter],
         run: () => onExecuteRef.current(),
+      });
+      editor.addAction({
+        id: "run-script",
+        label: "Run Script",
+        keybindings: [monaco.KeyMod.CtrlCmd | monaco.KeyMod.Alt | monaco.KeyCode.Enter],
+        run: () => onExecuteScriptRef.current?.(),
       });
       editor.addAction({
         id: "explain-query",

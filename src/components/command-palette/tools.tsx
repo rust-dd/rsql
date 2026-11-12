@@ -4,6 +4,7 @@ import {
   Download,
   Gauge,
   GitBranch,
+  ListOrdered,
   Moon,
   Pin,
   PinOff,
@@ -26,6 +27,7 @@ export function ActionsGroup({
   activeProject,
   hasQuery,
   onExecute,
+  onExecuteScript,
   onExplain,
   onAnalyze,
   formatQuery,
@@ -42,6 +44,7 @@ export function ActionsGroup({
   activeProject: string | undefined;
   hasQuery: boolean;
   onExecute: () => void;
+  onExecuteScript: () => void;
   onExplain: () => void;
   onAnalyze: () => void;
   formatQuery: () => void;
@@ -90,16 +93,31 @@ export function ActionsGroup({
       {activeProject && hasQuery && (
         <>
           <Command.Item
-            value="Execute Query"
+            value="Run Selection or Statement"
+            keywords={["execute", "query"]}
             onSelect={() => {
               onClose();
               onExecute();
             }}
           >
             <Play className="h-4 w-4 text-muted-foreground" />
-            <span>Execute Query</span>
+            <span>Run Selection or Statement</span>
             <span className="cmdk-detail">
               {navigator.platform.includes("Mac") ? "⌘" : "Ctrl"}+Enter
+            </span>
+          </Command.Item>
+          <Command.Item
+            value="Run Script"
+            keywords={["execute", "all"]}
+            onSelect={() => {
+              onClose();
+              onExecuteScript();
+            }}
+          >
+            <ListOrdered className="h-4 w-4 text-muted-foreground" />
+            <span>Run Script</span>
+            <span className="cmdk-detail">
+              {navigator.platform.includes("Mac") ? "⌘+⌥" : "Ctrl+Alt"}+Enter
             </span>
           </Command.Item>
           <Command.Item
