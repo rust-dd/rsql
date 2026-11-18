@@ -38,7 +38,7 @@ sysinfo = "0.40.1"
 tauri = { version = "2.12.1" }
 tauri-build = { version = "2" }
 tauri-plugin-dialog = "2.8.1"
-tauri-plugin-fs = "2.6.0"
+tauri-plugin-fs = "2.7.1"
 tauri-plugin-opener = "2.7.0"
 tauri-plugin-process = "2.4.0"
 tauri-plugin-shell = "2.4.0"
