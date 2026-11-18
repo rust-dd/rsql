@@ -4,8 +4,8 @@
   "description": "Fast PostgreSQL client with schema navigation, EXPLAIN tools, and a browser sandbox.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#09090b",
-  "theme_color": "#09090b",
+  "background_color": "#f7f8f4",
+  "theme_color": "#20392e",
   "icons": [
     {
       "src": "/favicon.svg",

@@ -1,190 +1,167 @@
-import { Download, Github, Menu, Moon, Sun, X } from "lucide-react";
+import { ArrowUpRight, Download, Github, Menu, Moon, Sun, X } from "lucide-react";
 import { useEffect, useState } from "react";
-import { Benchmarks } from "@/components/Benchmarks";
-import { Comparison } from "@/components/Comparison";
+import { Architecture } from "@/components/Architecture";
 import { CTA } from "@/components/CTA";
-import { Demo } from "@/components/Demo";
+import { FAQ } from "@/components/FAQ";
 import { Features } from "@/components/Features";
 import { Hero } from "@/components/Hero";
+import { Logo } from "@/components/Logo";
+import { Playground } from "@/components/Playground";
+import { DOCS_URL, DOWNLOAD_URL, REPOSITORY_URL, THEME_KEY } from "@/lib/site";
 
-const THEME_KEY = "rsql-theme";
-type Theme = "dark" | "light";
-
-function getTheme(): Theme {
-  if (typeof document !== "undefined") {
-    const d = document.documentElement.dataset.theme;
-    if (d === "light" || d === "dark") return d;
-  }
-  if (typeof window === "undefined") return "dark";
-  const s = window.localStorage.getItem(THEME_KEY);
-  if (s === "light" || s === "dark") return s;
-  return window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark";
-}
-
-const nav = [
-  { href: "#features", label: "Features" },
-  { href: "#comparison", label: "Compare" },
-  { href: "#benchmarks", label: "Performance" },
-  { href: "#demo", label: "Sandbox" },
+const navigation = [
+  { href: "#features", label: "The workbench" },
+  { href: "#demo", label: "Playground" },
+  { href: "#principles", label: "Why RSQL" },
+  { href: "#faq", label: "FAQ" },
 ];
 
 export function App() {
-  const [theme, setTheme] = useState<Theme>(getTheme);
-  const [menu, setMenu] = useState(false);
-  const [scrolled, setScrolled] = useState(false);
+  const [theme, setTheme] = useState(() =>
+    document.documentElement.dataset.theme === "dark" ? "dark" : "light",
+  );
+  const [menuOpen, setMenuOpen] = useState(false);
 
   useEffect(() => {
     document.documentElement.dataset.theme = theme;
     document.documentElement.style.colorScheme = theme;
-    window.localStorage.setItem(THEME_KEY, theme);
+    try {
+      localStorage.setItem(THEME_KEY, theme);
+    } catch {
+      // Theme switching still works when browser storage is unavailable.
+    }
   }, [theme]);
 
   useEffect(() => {
-    const fn = () => setScrolled(window.scrollY > 10);
-    window.addEventListener("scroll", fn, { passive: true });
-    return () => window.removeEventListener("scroll", fn);
+    const closeMenu = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setMenuOpen(false);
+    };
+    window.addEventListener("keydown", closeMenu);
+    return () => window.removeEventListener("keydown", closeMenu);
   }, []);
 
   return (
-    <div className="min-h-screen" style={{ background: "var(--bg)", color: "var(--fg)" }}>
-      {/* ─── Header ─── */}
-      <header
-        className="fixed inset-x-0 top-0 z-50 transition-all duration-300"
-        style={{
-          borderBottom: scrolled ? "1px solid var(--border-subtle)" : "1px solid transparent",
-          background: scrolled ? "color-mix(in srgb, var(--bg) 85%, transparent)" : "transparent",
-          backdropFilter: scrolled ? "blur(16px)" : "none",
-        }}
-      >
-        <div className="mx-auto flex h-14 max-w-[1080px] items-center justify-between px-6">
-          <a href="/" className="text-lg font-bold font-mono tracking-tight accent-text">
-            RSQL
+    <>
+      <a className="skip-link" href="#main">
+        Skip to content
+      </a>
+      <header className="site-header">
+        <div className="container header-inner">
+          <a href="#main" aria-label="RSQL home">
+            <Logo />
           </a>
-
-          <nav className="hidden md:flex items-center gap-1 text-[13px]">
-            {nav.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                className="rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--accent-muted)]"
-                style={{ color: "var(--fg-muted)" }}
-              >
-                {l.label}
+          <nav className="desktop-nav" aria-label="Main navigation">
+            {navigation.map((item) => (
+              <a key={item.href} href={item.href}>
+                {item.label}
               </a>
             ))}
-            <a
-              href="https://github.com/rust-dd/rust-sql"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="rounded-lg px-3 py-1.5 transition-colors hover:bg-[var(--accent-muted)] inline-flex items-center gap-1.5"
-              style={{ color: "var(--fg-muted)" }}
-            >
-              <Github className="h-3.5 w-3.5" />
-              GitHub
-            </a>
           </nav>
-
-          <div className="flex items-center gap-2">
+          <div className="header-actions">
+            <a
+              className="icon-button github-link"
+              href={REPOSITORY_URL}
+              aria-label="RSQL on GitHub"
+              target="_blank"
+              rel="noreferrer"
+            >
+              <Github size={19} />
+            </a>
             <button
+              className="icon-button"
               type="button"
               onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
-              aria-label="Theme"
-              className="h-8 w-8 rounded-full flex items-center justify-center transition-colors hover:bg-[var(--accent-muted)]"
-              style={{ color: "var(--fg-muted)" }}
+              aria-label={`Switch to ${theme === "dark" ? "light" : "dark"} theme`}
             >
-              {theme === "dark" ? <Sun className="h-4 w-4" /> : <Moon className="h-4 w-4" />}
+              {theme === "dark" ? <Sun size={18} /> : <Moon size={18} />}
             </button>
-            <a
-              href="https://github.com/rust-dd/rust-sql/releases/latest"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="hidden sm:inline-flex items-center gap-1.5 rounded-full px-4 py-1.5 text-xs font-semibold"
-              style={{ background: "var(--accent)", color: "var(--accent-fg)" }}
-            >
-              <Download className="h-3.5 w-3.5" />
-              Download
+            <a className="button button-small button-primary header-download" href={DOWNLOAD_URL}>
+              <Download size={14} /> Download
             </a>
             <button
+              className="icon-button menu-button"
               type="button"
-              onClick={() => setMenu(!menu)}
-              className="h-8 w-8 rounded-full flex items-center justify-center md:hidden"
-              style={{ color: "var(--fg-muted)" }}
+              aria-label={menuOpen ? "Close navigation" : "Open navigation"}
+              aria-expanded={menuOpen}
+              aria-controls="mobile-navigation"
+              onClick={() => setMenuOpen(!menuOpen)}
             >
-              {menu ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+              {menuOpen ? <X size={22} /> : <Menu size={22} />}
             </button>
           </div>
         </div>
-
-        {menu && (
-          <div
-            className="md:hidden px-6 py-3 animate-fade"
-            style={{ borderTop: "1px solid var(--border-subtle)", background: "var(--bg)" }}
-          >
-            {nav.map((l) => (
-              <a
-                key={l.href}
-                href={l.href}
-                onClick={() => setMenu(false)}
-                className="block rounded-lg px-3 py-2 text-sm"
-                style={{ color: "var(--fg-muted)" }}
-              >
-                {l.label}
-              </a>
-            ))}
-          </div>
-        )}
+        <nav
+          id="mobile-navigation"
+          className="mobile-nav"
+          aria-label="Mobile navigation"
+          hidden={!menuOpen}
+        >
+          {navigation.map((item) => (
+            <a key={item.href} href={item.href} onClick={() => setMenuOpen(false)}>
+              {item.label}
+              <ArrowUpRight size={16} />
+            </a>
+          ))}
+          <a href={DOWNLOAD_URL}>
+            Download RSQL
+            <Download size={16} />
+          </a>
+        </nav>
       </header>
 
-      {/* ─── Content ─── */}
-      <main>
+      <main id="main">
         <Hero />
         <Features />
-        <Comparison />
-        <Benchmarks />
-        <Demo />
+        <Playground />
+        <Architecture />
+        <FAQ />
         <CTA />
       </main>
 
-      {/* ─── Footer ─── */}
-      <footer className="px-6 pb-10">
-        <div className="mx-auto max-w-[1080px]">
-          <div className="divider mb-8" />
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-            <div className="flex items-center gap-3">
-              <span className="font-mono text-sm font-bold accent-text">RSQL</span>
-              <span className="text-sm" style={{ color: "var(--fg-subtle)" }}>
-                Open source PostgreSQL workbench
-              </span>
-            </div>
-            <div className="flex gap-4 text-sm" style={{ color: "var(--fg-subtle)" }}>
-              <a
-                href="https://github.com/rust-dd/rust-sql"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                Source
-              </a>
-              <a
-                href="https://github.com/rust-dd/rust-sql/releases"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                Releases
-              </a>
-              <a
-                href="https://github.com/rust-dd/rust-sql/issues"
-                target="_blank"
-                rel="noopener noreferrer"
-                className="hover:underline"
-              >
-                Issues
-              </a>
-            </div>
+      <footer className="site-footer container">
+        <div className="footer-top">
+          <div>
+            <a href="#main" aria-label="RSQL home">
+              <Logo />
+            </a>
+            <p>
+              A little less friction.
+              <br />A lot more SQL.
+            </p>
           </div>
+          <nav aria-label="Footer navigation">
+            <div>
+              <span>Product</span>
+              <a href="#features">Features</a>
+              <a href="#demo">Playground</a>
+              <a href={DOWNLOAD_URL}>
+                Releases <ArrowUpRight size={12} />
+              </a>
+            </div>
+            <div>
+              <span>Open source</span>
+              <a href={REPOSITORY_URL}>
+                GitHub <ArrowUpRight size={12} />
+              </a>
+              <a href={DOCS_URL}>
+                Documentation <ArrowUpRight size={12} />
+              </a>
+              <a href={`${REPOSITORY_URL}/issues`}>
+                Report an issue <ArrowUpRight size={12} />
+              </a>
+            </div>
+          </nav>
+        </div>
+        <div className="footer-bottom">
+          <span>Made for people who work with data.</span>
+          <a href={`${REPOSITORY_URL}/blob/main/LICENSE`}>
+            Free software. MIT licensed. <ArrowUpRight size={12} />
+          </a>
+          <span className="footer-status">
+            <span className="status-dot" /> Built with Rust & care
+          </span>
         </div>
       </footer>
-    </div>
+    </>
   );
 }

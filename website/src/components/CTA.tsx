@@ -1,46 +1,43 @@
-import { Download, Github } from "lucide-react";
+import { ArrowUpRight, Download, Github } from "lucide-react";
+import { DOWNLOAD_URL, REPOSITORY_URL } from "@/lib/site";
 
 export function CTA() {
   return (
-    <section className="px-6 py-28">
-      <div className="mx-auto max-w-[1080px] text-center">
-        <div className="divider mb-16" />
-
-        <span className="section-label">Get started</span>
-
-        <h2 className="font-display text-[clamp(2rem,5vw,3.5rem)] mt-4">Try RSQL today</h2>
-
-        <p className="mx-auto mt-4 max-w-md text-base text-[var(--fg-muted)] leading-relaxed">
-          Free, open source, no account needed. Available on macOS, Windows, and Linux.
-        </p>
-
-        <div className="mt-8 flex flex-col items-center gap-3 sm:flex-row sm:justify-center">
-          <a
-            href="https://github.com/rust-dd/rust-sql/releases/latest"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-primary"
-          >
-            <Download className="h-4 w-4" />
-            Download RSQL
-          </a>
-          <a
-            href="https://github.com/rust-dd/rust-sql"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn-secondary"
-          >
-            <Github className="h-4 w-4" />
-            View source
-          </a>
+    <section
+      id="download"
+      className="download-section container"
+      aria-labelledby="download-heading"
+    >
+      <div className="download-panel">
+        <div className="download-art" aria-hidden="true">
+          <span>SELECT</span>
+          <span>something</span>
+          <span>
+            great<span className="download-semicolon">;</span>
+          </span>
         </div>
-
-        <div className="mt-8 flex flex-wrap items-center justify-center gap-6 text-sm text-[var(--fg-subtle)]">
-          <span>macOS (Apple Silicon & Intel)</span>
-          <span className="hidden sm:inline">·</span>
-          <span>Windows (x64)</span>
-          <span className="hidden sm:inline">·</span>
-          <span>Linux (AppImage & deb)</span>
+        <div className="download-copy">
+          <span className="eyebrow">LESS SETUP. MORE DOING.</span>
+          <h2 id="download-heading">
+            Make room for
+            <br />
+            your next idea.
+          </h2>
+          <p>Your database is waiting. Let’s get to work.</p>
+          <div className="download-buttons">
+            <a className="button button-primary" href={DOWNLOAD_URL}>
+              <Download size={16} />
+              Download RSQL
+              <ArrowUpRight size={15} />
+            </a>
+            <a className="button button-ghost" href={REPOSITORY_URL}>
+              <Github size={17} />
+              View source
+            </a>
+          </div>
+          <span className="download-platforms">
+            macOS · Windows · Linux &nbsp; / &nbsp; Free & open source
+          </span>
         </div>
       </div>
     </section>

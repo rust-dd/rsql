@@ -1,10 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
-  <defs>
-    <linearGradient id="g" x1="0%" y1="0%" x2="100%" y2="100%">
-      <stop offset="0%" stop-color="#7c5bf0"/>
-      <stop offset="100%" stop-color="#a855f7"/>
-    </linearGradient>
-  </defs>
-  <rect width="32" height="32" rx="8" fill="#09090b"/>
-  <text x="16" y="22" text-anchor="middle" font-family="monospace" font-weight="bold" font-size="14" fill="url(#g)">R</text>
+  <rect width="32" height="32" rx="8" fill="#c1f2a8"/>
+  <g fill="none" stroke="#20392e" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
+    <ellipse cx="16" cy="9" rx="8" ry="3.5"/>
+    <path d="M8 9v14c0 1.93 3.58 3.5 8 3.5s8-1.57 8-3.5V9M8 16c0 1.93 3.58 3.5 8 3.5s8-1.57 8-3.5"/>
+  </g>
 </svg>

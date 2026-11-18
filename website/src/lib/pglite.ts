@@ -63,9 +63,16 @@ export async function getDB(): Promise<PGlite> {
   if (initPromise) return initPromise;
 
   initPromise = (async () => {
-    db = new PGlite();
-    await db.exec(SEED_SQL);
-    return db;
+    const candidate = new PGlite();
+    try {
+      await candidate.exec(SEED_SQL);
+      db = candidate;
+      return candidate;
+    } catch (error) {
+      initPromise = null;
+      await candidate.close().catch(() => undefined);
+      throw error;
+    }
   })();
 
   return initPromise;

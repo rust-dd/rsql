@@ -3,10 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>RSQL | Fast PostgreSQL Client for Querying, EXPLAIN, and Large Results</title>
+    <title>RSQL — Less friction. More SQL. | Open-source PostgreSQL client</title>
     <meta
       name="description"
-      content="RSQL is a fast PostgreSQL client built with Rust, Tauri, and React. Query data, inspect schema, run EXPLAIN, and explore large result sets in a calmer desktop UI or browser sandbox."
+      content="A calmer place to work with PostgreSQL. Write queries, explore data, and inspect query plans. Free and open source for macOS, Windows, and Linux. Try the SQL playground."
     />
     <meta
       name="robots"
@@ -16,8 +16,8 @@
     <meta name="apple-mobile-web-app-title" content="RSQL" />
     <meta name="author" content="rust-dd" />
     <meta name="format-detection" content="telephone=no" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#09090b" />
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f5f1e8" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#131b17" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f7f8f4" />
     <link rel="canonical" href="https://rsql.rust-dd.com/" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
     <link rel="manifest" href="/site.webmanifest" />
@@ -26,22 +26,22 @@
     <meta property="og:site_name" content="RSQL" />
     <meta property="og:locale" content="en_US" />
     <meta property="og:url" content="https://rsql.rust-dd.com/" />
-    <meta property="og:title" content="RSQL | Fast PostgreSQL Client for Querying, EXPLAIN, and Large Results" />
+    <meta property="og:title" content="RSQL — Less friction. More SQL." />
     <meta
       property="og:description"
-      content="A modern PostgreSQL client with a browser sandbox, EXPLAIN tools, schema navigation, and large-result performance that stays responsive."
+      content="A calmer place to work with PostgreSQL. A free, open-source desktop workbench for macOS, Windows, and Linux."
     />
     <meta property="og:image" content="https://rsql.rust-dd.com/og-image.svg" />
     <meta property="og:image:type" content="image/svg+xml" />
     <meta property="og:image:width" content="1200" />
     <meta property="og:image:height" content="630" />
-    <meta property="og:image:alt" content="RSQL PostgreSQL client preview card" />
+    <meta property="og:image:alt" content="RSQL — Less friction. More SQL. An open-source PostgreSQL workbench." />
 
     <meta name="twitter:card" content="summary_large_image" />
-    <meta name="twitter:title" content="RSQL | Fast PostgreSQL Client for Querying, EXPLAIN, and Large Results" />
+    <meta name="twitter:title" content="RSQL — Less friction. More SQL." />
     <meta
       name="twitter:description"
-      content="Query data, inspect schema, run EXPLAIN, and explore large result sets in a modern PostgreSQL client built with Rust and Tauri."
+      content="A free, open-source PostgreSQL workbench. Write queries, explore your data, and get back to building."
     />
     <meta name="twitter:image" content="https://rsql.rust-dd.com/og-image.svg" />
 
@@ -51,13 +51,12 @@
         "@type": "SoftwareApplication",
         "name": "RSQL",
         "applicationCategory": "DeveloperApplication",
-        "operatingSystem": "macOS, Windows, Linux, Web",
-        "description": "RSQL is a fast PostgreSQL client built with Rust, Tauri, and React. Query data, inspect schema, run EXPLAIN, and explore large result sets in a modern desktop UI or browser sandbox.",
+        "operatingSystem": "macOS, Windows, Linux",
+        "description": "A free, open-source PostgreSQL desktop workbench. Write queries, explore schemas, edit data, and inspect query plans.",
         "url": "https://rsql.rust-dd.com/",
         "downloadUrl": "https://github.com/rust-dd/rust-sql/releases/latest",
         "codeRepository": "https://github.com/rust-dd/rust-sql",
         "image": "https://rsql.rust-dd.com/og-image.svg",
-        "screenshot": "https://rsql.rust-dd.com/og-image.svg",
         "offers": {
           "@type": "Offer",
           "price": "0",
@@ -80,15 +79,15 @@
       (() => {
         const key = "rsql-website-theme";
         try {
-          const storedTheme = window.localStorage.getItem(key);
+          const storedTheme = window.localStorage.getItem(key) || window.localStorage.getItem("rsql-theme");
           const theme = storedTheme === "light" || storedTheme === "dark"
             ? storedTheme
-            : (window.matchMedia("(prefers-color-scheme: light)").matches ? "light" : "dark");
+            : "light";
           document.documentElement.dataset.theme = theme;
           document.documentElement.style.colorScheme = theme;
         } catch {
-          document.documentElement.dataset.theme = "dark";
-          document.documentElement.style.colorScheme = "dark";
+          document.documentElement.dataset.theme = "light";
+          document.documentElement.style.colorScheme = "light";
         }
       })();
     </script>
