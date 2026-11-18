@@ -1,4 +1,5 @@
-import { ArrowUpRight, Download, Github } from "lucide-react";
+import { ArrowUpRight, Download } from "lucide-react";
+import { GitHubIcon } from "@/components/GitHubIcon";
 import { DOWNLOAD_URL, REPOSITORY_URL } from "@/lib/site";
 
 export function CTA() {
@@ -31,7 +32,7 @@ export function CTA() {
               <ArrowUpRight size={15} />
             </a>
             <a className="button button-ghost" href={REPOSITORY_URL}>
-              <Github size={17} />
+              <GitHubIcon size={17} />
               View source
             </a>
           </div>

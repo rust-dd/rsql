@@ -1,9 +1,10 @@
-import { ArrowUpRight, Download, Github, Menu, Moon, Sun, X } from "lucide-react";
+import { ArrowUpRight, Download, Menu, Moon, Sun, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Architecture } from "@/components/Architecture";
 import { CTA } from "@/components/CTA";
 import { FAQ } from "@/components/FAQ";
 import { Features } from "@/components/Features";
+import { GitHubIcon } from "@/components/GitHubIcon";
 import { Hero } from "@/components/Hero";
 import { Logo } from "@/components/Logo";
 import { Playground } from "@/components/Playground";
@@ -65,7 +66,7 @@ export function App() {
               target="_blank"
               rel="noreferrer"
             >
-              <Github size={19} />
+              <GitHubIcon size={19} />
             </a>
             <button
               className="icon-button"
