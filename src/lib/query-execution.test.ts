@@ -77,6 +77,53 @@ beforeEach(() => {
 });
 afterEach(() => useTabStore.getState().closeAllTabs());
 
+describe("connection recovery", () => {
+  it("reconnects before rerunning SQL in the same disconnected tab", async () => {
+    driver.executeVirtual
+      .mockResolvedValueOnce(["value", 1, "before", 1, false])
+      .mockResolvedValueOnce(["value", 1, "after", 1, false]);
+    await executeTabQuery();
+    const tabId = active().id;
+    projectState.status.project = ProjectConnectionStatus.Disconnected;
+    projectState.connect.mockImplementationOnce(async () => {
+      projectState.status.project = ProjectConnectionStatus.Connected;
+    });
+
+    await executeTabQuery();
+
+    expect(projectState.connect).toHaveBeenCalledExactlyOnceWith("project");
+    expect(active().id).toBe(tabId);
+    expect(active().result?.rows).toEqual([["after"]]);
+    expect(active().isExecuting).toBe(false);
+  });
+
+  it.each([
+    "query",
+    "split",
+  ] as const)("a connection failure clears the %s spinner and allows the same pane to run again", async (mode) => {
+    useTabStore.setState({ tabs: [{ ...tab(), isSplit: true, splitEditorValue: "SELECT 2" }] });
+    driver.executeVirtual
+      .mockRejectedValueOnce(new Error("Connection failed: timeout while creating a connection"))
+      .mockResolvedValueOnce(["value", 1, "reconnected", 1, false]);
+
+    await executeTabQuery(mode);
+
+    const failed = active();
+    expect(mode === "split" ? failed.isSplitExecuting : failed.isExecuting).toBe(false);
+    expect((mode === "split" ? failed.splitResult : failed.result)?.status).toBe("error");
+    expect(driver.executeVirtual).toHaveBeenCalledTimes(1);
+
+    await executeTabQuery(mode);
+
+    const recovered = active();
+    expect(recovered.id).toBe(failed.id);
+    expect((mode === "split" ? recovered.splitResult : recovered.result)?.rows).toEqual([
+      ["reconnected"],
+    ]);
+    expect(mode === "split" ? recovered.isSplitExecuting : recovered.isExecuting).toBe(false);
+  });
+});
+
 describe("query ownership", () => {
   it("ignores an old result and does not clear a newer spinner", async () => {
     const old = deferred<unknown>();

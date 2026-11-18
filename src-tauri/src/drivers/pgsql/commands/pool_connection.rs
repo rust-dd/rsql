@@ -14,6 +14,10 @@ use crate::drivers::pgsql::tls::PgSslMode;
 use tauri::{AppHandle, Manager, Result, State};
 use tokio_postgres::{Config, NoTls};
 
+#[cfg(test)]
+#[path = "pool_reconnect_tests.rs"]
+mod reconnect_tests;
+
 pub(crate) fn full_error_chain(e: &dyn std::error::Error) -> String {
     let mut msg = e.to_string();
     let mut src = e.source();
@@ -31,10 +35,9 @@ pub(crate) fn full_error_chain(e: &dyn std::error::Error) -> String {
 pub(crate) const QUERY_POOL_SIZE: usize = 8;
 pub(crate) const META_POOL_SIZE: usize = 4;
 
-/// Waiting for a free connection is bounded: an exhausted pool used to block
-/// the caller indefinitely, which showed up as a window that had simply stopped
-/// responding. Query duration itself stays governed by `statement_timeout`.
-const POOL_WAIT: Duration = Duration::from_secs(10);
+/// Bounds each connection acquisition step before user SQL starts.
+/// Query duration itself stays governed by `statement_timeout`.
+const CONNECTION_TIMEOUT: Duration = Duration::from_secs(10);
 
 pub(crate) fn create_pg_pool(
     cfg: &Config,
@@ -45,8 +48,9 @@ pub(crate) fn create_pg_pool(
         recycling_method: RecyclingMethod::Fast,
     };
     let timeouts = Timeouts {
-        wait: Some(POOL_WAIT),
-        ..Timeouts::default()
+        wait: Some(CONNECTION_TIMEOUT),
+        create: Some(CONNECTION_TIMEOUT),
+        recycle: Some(CONNECTION_TIMEOUT),
     };
 
     let mut cfg = cfg.clone();
@@ -63,7 +67,14 @@ pub(crate) fn create_pg_pool(
         .timeouts(timeouts)
         .runtime(Runtime::Tokio1)
         .post_recycle(Hook::async_fn(|client, _| {
-            Box::pin(async move { reset_session(client).await.map_err(HookError::Backend) })
+            Box::pin(async move {
+                // deadpool's recycle timeout does not cover hooks. A stalled idle
+                // connection must be discarded before the user's SQL is sent.
+                tokio::time::timeout(CONNECTION_TIMEOUT, reset_session(client))
+                    .await
+                    .map_err(|_| HookError::message("Session reset timed out"))?
+                    .map_err(HookError::Backend)
+            })
         }))
         .build()
         .map_err(|e| AppError::ConnectionFailed(e.to_string()))
@@ -80,9 +91,8 @@ pub(crate) async fn acquire_client(
 
     pool.get().await.map_err(|e| {
         AppError::ConnectionFailed(format!(
-            "No connection available within {}s: {}",
-            POOL_WAIT.as_secs(),
-            e
+            "Could not acquire a database connection: {}",
+            full_error_chain(&e)
         ))
     })
 }
