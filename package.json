@@ -25,7 +25,7 @@
     "@radix-ui/react-label": "^2.1.15",
     "@tauri-apps/api": "^2.12.1",
     "@tauri-apps/plugin-dialog": "^2.8.1",
-    "@tauri-apps/plugin-fs": "^2.6.0",
+    "@tauri-apps/plugin-fs": "^2.7.1",
     "@tauri-apps/plugin-process": "^2.4.0",
     "@tauri-apps/plugin-updater": "^2.14.1",
     "@xterm/addon-fit": "^0.11.0",
