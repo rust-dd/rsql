@@ -8,9 +8,8 @@ use std::{collections::BTreeMap, path::Path};
 
 // Tauri clients try {os}-{arch}-{installer} first, so every Tauri 1.x install falls back to these.
 // Deb/rpm keys let package installs upgrade in place; the package name stays `rsql`.
-const PLATFORMS: [(&str, &str, PackageFormat); 6] = [
+const PLATFORMS: [(&str, &str, PackageFormat); 5] = [
     ("darwin-aarch64", "aarch64-apple-darwin", AppTarGz),
-    ("darwin-x86_64", "x86_64-apple-darwin", AppTarGz),
     ("linux-x86_64", "x86_64-unknown-linux-gnu", AppImage),
     ("linux-x86_64-deb", "x86_64-unknown-linux-gnu", Deb),
     ("linux-x86_64-rpm", "x86_64-unknown-linux-gnu", Rpm),

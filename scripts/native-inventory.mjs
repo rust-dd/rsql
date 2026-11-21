@@ -35,7 +35,6 @@ const linux = "3.2.0";
 
 const kinds = [
   ["_aarch64.app.tar.gz", "aarch64-apple-darwin", "app", "app-tar-gz", macos],
-  ["_x64.app.tar.gz", "x86_64-apple-darwin", "app", "app-tar-gz", macos],
   ["-setup.exe", "x86_64-pc-windows-msvc", "nsis", "nsis", windows],
   [".AppImage", "x86_64-unknown-linux-gnu", "appimage", "appimage", linux],
   [".deb", "x86_64-unknown-linux-gnu", "deb", "deb", linux],
