@@ -46,7 +46,7 @@ portable-pty = "0.9.0"
 postgres-native-tls = "0.5"
 rand = "0.10"
 rayon = "1.11.0"
-reqwest = { version = "=0.13.2", default-features = false, features = ["native-tls-no-alpn"] }
+reqwest = { version = "=0.13.5", default-features = false, features = ["native-tls-no-alpn"] }
 rfd = { version = "=0.16.0", default-features = false, features = ["gtk3"] }
 ropey = "=2.0.0-beta.1"
 roxmltree = { version = "=0.21.2", default-features = false }
