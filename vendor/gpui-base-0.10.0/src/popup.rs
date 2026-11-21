@@ -1,0 +1,224 @@
+use std::{cell::Cell, rc::Rc};
+
+use gpui::{
+    Anchor, AnyElement, App, Bounds, Div, ElementId, InteractiveElement, Interactivity,
+    IntoElement, ParentElement, Pixels, Point, RenderOnce, StatefulInteractiveElement,
+    StyleRefinement, Styled, Window, canvas, deferred, div, point, px,
+};
+
+use crate::{LayoutDirection, Positioner, ResolvedPosition, StyledExt as _};
+
+/// Distance kept between a popup and the window edge.
+const WINDOW_MARGIN: Pixels = px(8.);
+
+/// Deferred paint priority for interactive surfaces that must appear above dialogs.
+pub const POPUP_PRIORITY: usize = 100;
+
+#[derive(Default)]
+struct PopupAnchorState {
+    bounds: Bounds<Pixels>,
+    captured: bool,
+}
+
+/// An unstyled trigger and anchored popup host.
+///
+/// `Popup` owns trigger measurement, anchor-point calculation, first-frame
+/// synchronization, deferred rendering, and window-edge snapping. Callers own
+/// open state, interaction, popup content, appearance, and motion.
+#[derive(IntoElement)]
+pub struct Popup {
+    id: ElementId,
+    base: gpui::Stateful<Div>,
+    style: StyleRefinement,
+    anchor: Anchor,
+    offset: Pixels,
+    on_position: Option<Box<dyn Fn(ResolvedPosition, Bounds<Pixels>)>>,
+    trigger: AnyElement,
+    content: Option<AnyElement>,
+}
+
+impl Popup {
+    pub fn new(id: impl Into<ElementId>, trigger: impl IntoElement) -> Self {
+        let id = id.into();
+        Self {
+            base: div().id(id.clone()),
+            id,
+            style: StyleRefinement::default(),
+            anchor: Anchor::TopLeft,
+            offset: px(0.),
+            on_position: None,
+            trigger: trigger.into_any_element(),
+            content: None,
+        }
+    }
+
+    pub fn anchor(mut self, anchor: impl Into<Anchor>) -> Self {
+        self.anchor = anchor.into();
+        self
+    }
+
+    /// Gap from the trigger along the anchor's outward direction, zero by default.
+    pub fn offset(mut self, offset: Pixels) -> Self {
+        self.offset = offset;
+        self
+    }
+
+    /// Observe resolved popup and trigger bounds before content prepaint.
+    pub fn on_position(
+        mut self,
+        callback: impl Fn(ResolvedPosition, Bounds<Pixels>) + 'static,
+    ) -> Self {
+        self.on_position = Some(Box::new(callback));
+        self
+    }
+
+    pub fn content(mut self, content: impl IntoElement) -> Self {
+        self.content = Some(content.into_any_element());
+        self
+    }
+
+    pub fn resolved_corner(anchor: Anchor, trigger_bounds: Bounds<Pixels>) -> Point<Pixels> {
+        match anchor {
+            Anchor::TopLeft => trigger_bounds.origin,
+            Anchor::TopCenter => trigger_bounds.top_center(),
+            Anchor::TopRight => trigger_bounds.top_right(),
+            Anchor::BottomLeft => Point {
+                x: trigger_bounds.origin.x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            Anchor::BottomCenter => Point {
+                x: trigger_bounds.top_center().x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            Anchor::BottomRight => Point {
+                x: trigger_bounds.top_right().x,
+                y: trigger_bounds.origin.y - trigger_bounds.size.height,
+            },
+            Anchor::LeftCenter | Anchor::RightCenter => trigger_bounds.origin,
+        }
+    }
+}
+
+/// The physical anchor for `anchor` in `direction`.
+///
+/// Anchors are written for left-to-right layout; in RTL the horizontal side
+/// is mirrored, so a `TopLeft` popover that hangs from the trigger's start
+/// edge hangs from its right edge instead.
+pub fn logical_anchor(anchor: Anchor, direction: LayoutDirection) -> Anchor {
+    if !direction.is_rtl() {
+        return anchor;
+    }
+    match anchor {
+        Anchor::TopLeft => Anchor::TopRight,
+        Anchor::TopRight => Anchor::TopLeft,
+        Anchor::BottomLeft => Anchor::BottomRight,
+        Anchor::BottomRight => Anchor::BottomLeft,
+        Anchor::LeftCenter => Anchor::RightCenter,
+        Anchor::RightCenter => Anchor::LeftCenter,
+        Anchor::TopCenter | Anchor::BottomCenter => anchor,
+    }
+}
+
+/// Match the popup's anchor to the opposite edge of the measured trigger.
+fn anchor_position(anchor: Anchor, trigger: Bounds<Pixels>, offset: Pixels) -> Point<Pixels> {
+    match anchor {
+        Anchor::TopLeft => trigger.bottom_left() + point(px(0.), offset),
+        Anchor::TopCenter => trigger.bottom_center() + point(px(0.), offset),
+        Anchor::TopRight => trigger.bottom_right() + point(px(0.), offset),
+        Anchor::BottomLeft => trigger.origin - point(px(0.), offset),
+        Anchor::BottomCenter => trigger.top_center() - point(px(0.), offset),
+        Anchor::BottomRight => trigger.top_right() - point(px(0.), offset),
+        Anchor::LeftCenter => trigger.right_center() + point(offset, px(0.)),
+        Anchor::RightCenter => trigger.left_center() - point(offset, px(0.)),
+    }
+}
+
+impl Styled for Popup {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl InteractiveElement for Popup {
+    fn interactivity(&mut self) -> &mut Interactivity {
+        self.base.interactivity()
+    }
+}
+
+impl StatefulInteractiveElement for Popup {}
+
+impl RenderOnce for Popup {
+    fn render(self, window: &mut Window, cx: &mut App) -> impl IntoElement {
+        let state =
+            window.use_keyed_state((self.id, "anchor"), cx, |_, _| PopupAnchorState::default());
+        let anchor = logical_anchor(self.anchor, LayoutDirection::global(cx));
+        let trigger_bounds = Rc::new(Cell::new(state.read(cx).bounds));
+        let offset = self.offset;
+        let position = Rc::new(Cell::new(anchor_position(
+            anchor,
+            state.read(cx).bounds,
+            offset,
+        )));
+
+        // A closed popup places nothing: it notes its trigger's bounds, for when
+        // it opens, without asking for another frame.
+        let has_content = self.content.is_some();
+        let root = self
+            .base
+            .child(self.trigger)
+            .child(
+                canvas(
+                    {
+                        let state = state.clone();
+                        let position = position.clone();
+                        let trigger_bounds = trigger_bounds.clone();
+                        move |bounds, window, cx| {
+                            trigger_bounds.set(bounds);
+                            position.set(anchor_position(anchor, bounds, offset));
+                            let first = state.update(cx, |state, _| {
+                                let first = !state.captured;
+                                state.bounds = bounds;
+                                state.captured = true;
+                                first
+                            });
+                            if first && has_content {
+                                window.request_animation_frame();
+                            }
+                        }
+                    },
+                    |_, _, _, _| {},
+                )
+                .absolute()
+                .size_full()
+                .top_0()
+                .left_0(),
+            )
+            .refine_style(&self.style);
+
+        let Some(content) = self.content else {
+            return root;
+        };
+        if !state.read(cx).captured {
+            return root;
+        }
+
+        let positioner =
+            Positioner::corner(anchor, position.get()).tracked_corner_position(position);
+        let positioner = if let Some(callback) = self.on_position {
+            positioner.on_position(move |position| callback(position, trigger_bounds.get()))
+        } else {
+            positioner
+        };
+        root.child(
+            deferred(
+                positioner
+                    .margin(WINDOW_MARGIN)
+                    // The host blocks the mouse, so no caller has to remember:
+                    // what a popup covers belongs to the popup.
+                    .occlude()
+                    .child(content),
+            )
+            .with_priority(POPUP_PRIORITY),
+        )
+    }
+}

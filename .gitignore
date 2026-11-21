@@ -14,8 +14,7 @@ dist-perf
 *.local
 
 # Editor directories and files
-.vscode/*
-!.vscode/extensions.json
+.vscode/
 .idea
 .DS_Store
 *.suo
@@ -24,9 +23,8 @@ dist-perf
 *.sln
 *.sw?
 
-# Rust/Tauri build output
+# Rust build output
 target/
-**/gen/schemas/
 
 # Local sled databases
 project_db/

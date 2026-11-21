@@ -1,0 +1,14 @@
+gpui-pre-macos 0.3.12 local source distribution
+
+Upstream repository  https://github.com/zed-industries/zed
+Upstream revision    d2a4fb6ded7c470be25d1541281da3882495b65b (crates/gpui_macos)
+Crates.io archive    gpui-pre-macos-0.3.12.crate
+Archive SHA-256      2de7d3f4ad51ac387e822495db363fcc1188d349793365731d054444c4cb06ee
+License              Apache-2.0, original LICENSE-APACHE
+
+The normalized Cargo.toml and original source files are preserved except for
+src/gpui_macos.rs, which exports the termination module, and src/platform.rs,
+which registers applicationShouldTerminate: on the existing delegate.
+The new src/termination.rs implements main-thread veto registration and a
+test-support probe of the actual delegate selector. The archive's Cargo.lock
+and Cargo.toml.orig are omitted. This workspace supplies the dependency lock.

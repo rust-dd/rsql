@@ -2,7 +2,7 @@
 
 **A desktop PostgreSQL client for macOS, Windows and Linux.**
 
-Write SQL, edit data, explore schemas and inspect query plans in one app. RSQL is built with Rust, Tauri and React, and is free and open source under the MIT license. No account required. No telemetry.
+Write SQL, edit data, explore schemas and inspect query plans in one app. RSQL is a native Rust app built on GPUI, and is free and open source under the MIT license. No account required. No telemetry.
 
 [Download](https://github.com/rust-dd/rsql/releases/latest) · [First query](#run-your-first-query) · [Features](#features) · [Development](#development) · [Report an issue](https://github.com/rust-dd/rsql/issues)
 
@@ -14,9 +14,9 @@ Choose an installer from the [latest release](https://github.com/rust-dd/rsql/re
 
 | Platform | Architecture | Download |
 | --- | --- | --- |
-| macOS | Apple Silicon | `rsql_<version>_aarch64.dmg` |
-| macOS | Intel | `rsql_<version>_x64.dmg` |
-| Windows | x64 | `.msi` or `-setup.exe` |
+| macOS 15 or later | Apple Silicon | `RSQL_<version>_aarch64.dmg` |
+| macOS 15 or later | Intel | `RSQL_<version>_x64.dmg` |
+| Windows 10 or later | x64 | `-setup.exe` |
 | Linux | x86_64 | `.AppImage`, `.deb` or `.rpm` |
 
 On macOS, open the DMG and drag RSQL into Applications. Signing and notarization details are documented in the [macOS release guide](docs/macos-release.md).
@@ -99,7 +99,7 @@ The backend retains at most **1,000,000 rows per result**, within a **256 MiB bu
 
 ## Local data and credentials
 
-Saved connections, queries and workspaces live in a local `rsql.db` database. Release builds use the operating system's application data directory; debug builds use the working directory. Open query tabs and editor contents are restored from local WebView storage. Query history is held in memory for the current session.
+Saved connections, queries and workspaces live in a local `rsql.db` database. Release builds use the operating system's application data directory; debug builds use the working directory. Open query tabs and editor contents are restored from the same profile directory. Query history is stored in `rsql.db` and can be turned off or cleared.
 
 **Database and SSH passwords are currently stored unencrypted in `rsql.db`.** Treat that file and its backups as sensitive. When older connection records are migrated to stable IDs, RSQL first creates a sibling backup named `rsql.db.<timestamp>.bak`.
 
@@ -107,79 +107,54 @@ Saved connections, queries and workspaces live in a local `rsql.db` database. Re
 
 ### Prerequisites
 
-- Node.js **24.21.0**, pinned in [`.node-version`](.node-version).
-- Yarn **1.x**.
-- Rust **1.95.0**, pinned in [`src-tauri/rust-toolchain.toml`](src-tauri/rust-toolchain.toml).
-- The [Tauri system prerequisites](https://v2.tauri.app/start/prerequisites/) for your operating system.
-- Access to a PostgreSQL server to use the app. CI runs integration tests against PostgreSQL **16, 17 and 18**.
+- Rust **1.98.0**, pinned in [`rust-toolchain.toml`](rust-toolchain.toml).
+- On Linux, the GPUI build dependencies: `clang`, `libfontconfig-dev`, `libgtk-3-dev`, `libssl-dev`, `libvulkan1`, `libwayland-dev`, `libx11-xcb-dev`, `libxkbcommon-x11-dev` and `libzstd-dev`.
+- Access to a PostgreSQL server to use the app.
 
 ### Run locally
 
 ```bash
 git clone https://github.com/rust-dd/rsql.git
 cd rsql
-yarn install --frozen-lockfile
-yarn tauri dev
+cargo run --locked -p rsql-desktop
 ```
 
-`yarn tauri dev` starts both Vite and the desktop app. `yarn dev` starts only the frontend server; database access requires the Tauri backend.
+Debug builds keep their data in a separate preview profile. Pass `-- --profile-dir PATH` to use another profile directory.
 
-### Build an installer
+### Build a package
 
-For a local build without release signing keys, disable updater artifacts:
+Release builds use the production profile directory and identity:
 
 ```bash
-yarn tauri build --no-sign --config '{"bundle":{"createUpdaterArtifacts":false}}'
+cargo build --locked --release -p rsql-desktop --features production
 ```
 
-Installers are written to `src-tauri/target/release/bundle/`. Automatic updates are disabled in builds without `TAURI_UPDATER_PUBLIC_KEY`.
+The [release workflow](.github/workflows/release.yml) packages the app with [`cargo-packager`](https://github.com/crabnebula-dev/cargo-packager) (DMG, `.app.tar.gz`, NSIS, AppImage and deb) and `cargo-generate-rpm`. Packaging metadata lives in [`crates/rsql-desktop/Cargo.toml`](crates/rsql-desktop/Cargo.toml). Automatic updates are disabled in builds without `TAURI_UPDATER_PUBLIC_KEY`.
 
-### Checks and tests
-
-Run the frontend checks from the repository root:
+### Checks
 
 ```bash
 node scripts/check-version.mjs
-yarn check:ci
-yarn typecheck
-yarn test
-yarn build
-```
-
-Run Rust checks from `src-tauri` so the pinned toolchain is used:
-
-```bash
-cd src-tauri
-cargo fmt --check
-cargo clippy --locked --all-targets -- -D warnings
-cargo test --locked
-```
-
-Database integration tests are ignored by default. To run them, point `RSQL_TEST_DATABASE_URL` at a disposable PostgreSQL database. From the repository root, in a Bash-compatible shell:
-
-```bash
-cd src-tauri
-export RSQL_TEST_DATABASE_URL=postgres://postgres:postgres@localhost:5432/postgres
-cargo test --locked --test row_mutations --test schema_index --test foreign_keys -- --ignored
-cargo test --locked --bin rsql -- --ignored
+cargo fmt --all --check
+cargo clippy --workspace --locked --all-targets -- -D warnings
 ```
 
 ### Project layout
 
 | Path | Contents |
 | --- | --- |
-| [`src/`](src/) | React UI, Zustand stores, Monaco completion and Tauri client calls |
-| [`src-tauri/`](src-tauri/) | Rust backend, PostgreSQL driver, SSH tunnels and local storage |
-| [`tests/`](tests/) | Shared fixtures and browser performance harnesses |
-| [`scripts/`](scripts/) | Version checks, dependency audits and icon generation |
+| [`crates/rsql-desktop/`](crates/rsql-desktop/) | Native GPUI app: workspace, SQL editor, results grid, schema tools, terminal, updater and packaging metadata |
+| [`crates/rsql-core/`](crates/rsql-core/) | Shared Rust services: PostgreSQL connections, SSH tunnels, query engine, catalog and administration, result cache, row mutations and local storage |
+| [`vendor/`](vendor/) | Pinned GPUI Kit and terminal crates with local patches |
+| [`scripts/`](scripts/) | Version checks, release inventory and dependency audits |
 | [`docs/`](docs/) | Project documentation and release setup |
 | [`website/`](website/) | Separate website with an interactive SQL demo |
 
-The desktop icon source is [`assets/app-icon.png`](assets/app-icon.png). Run `yarn icons:generate` to regenerate platform icons; see the [icon notes](assets/README.md).
+The desktop icon source is [`assets/app-icon.png`](assets/app-icon.png); the packaged icons live in `crates/rsql-desktop/packaging/icons`.
 
 ### Architecture
 
-The React UI talks to Rust through Tauri commands. The PostgreSQL driver uses `tokio-postgres`'s simple query protocol, preserving database values as text. Results cross the IPC boundary as packed strings and are decoded into grid pages in the frontend.
+The UI is rendered natively with GPUI and talks to the shared services in `rsql-core` directly, on an owned Tokio runtime. The PostgreSQL driver uses `tokio-postgres`'s simple query protocol, preserving database values as text, and results are decoded into bounded grid pages.
 
 Each saved connection has separate pools for user queries (up to 8 connections) and metadata (up to 4), so schema browsing does not queue behind a long query. Local persistence uses libSQL.
 
@@ -191,7 +166,7 @@ For code changes, run the relevant checks above and describe the problem and res
 
 ## Releases
 
-Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml). It verifies version consistency, runs frontend and Rust checks, builds the supported platforms, and uploads signed updater artifacts to a draft GitHub release. Publish the draft after the builds and signing checks finish. The updater endpoint is configured in [`tauri.conf.json`](src-tauri/tauri.conf.json).
+Pushing a `v*` tag runs the [release workflow](.github/workflows/release.yml). It verifies version consistency, builds and packages the supported platforms, and uploads signed installers and update feeds to a draft GitHub release. Publish the draft after the builds and signing checks finish. The native app reads `native-latest.json`; `latest.json` lets installed 1.x versions update to the native app.
 
 <details>
 <summary>Release signing configuration</summary>
