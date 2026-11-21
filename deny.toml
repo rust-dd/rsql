@@ -3,4 +3,7 @@
 unmaintained = "workspace"
 ignore = [
     { id = "RUSTSEC-2023-0071", reason = "No patched rsa version exists. Retain russh RSA authentication compatibility; the client uses SSH signatures, not RSA decryption, and verifies host trust before authentication. Track https://github.com/RustCrypto/RSA/issues/626 and re-evaluate when updating russh/rsa. This exception does not assert the crypto is constant-time." },
+    { id = "RUSTSEC-2026-0194", reason = "quick-xml 0.38 is reached only through gpui-pre-linux -> accesskit_unix 0.22 -> atspi-common 0.13 -> zbus-lockstep -> zbus_xml 5, which checks the Linux accessibility stack's D-Bus interface definitions. No semver-compatible release of that chain uses quick-xml 0.41+. Re-evaluate when GPUI updates accesskit." },
+    { id = "RUSTSEC-2026-0195", reason = "Same quick-xml 0.38 path as RUSTSEC-2026-0194, Linux accessibility only; blocked on GPUI updating accesskit." },
+    { id = "RUSTSEC-2026-0543", reason = "chrono is unmaintained, but gpui-pre and GPUI Kit depend on it, so it stays in the dependency tree. Move rsql's own date handling off chrono together with that GPUI update." },
 ]
