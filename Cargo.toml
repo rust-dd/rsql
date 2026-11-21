@@ -62,7 +62,7 @@ sqlparser = { version = "=0.59.0", default-features = false, features = ["std"] 
 sum-tree = { package = "gpui-pre-sum-tree", version = "=0.3.12" }
 sys-locale = "=0.3.2"
 sysinfo = "0.40.1"
-tar = { version = "=0.4.45", default-features = false }
+tar = { version = "=0.4.46", default-features = false }
 tempfile = "3"
 thiserror = "2"
 tokio = { version = "1.53.3", features = ["macros", "rt-multi-thread", "sync", "time"] }
