@@ -1,0 +1,20 @@
+RSQL local source distribution of vte 0.15.0
+Upstream: https://crates.io/api/v1/crates/vte/0.15.0/download
+Archive SHA-256: a5924018406ce0063cd67f8e008104968b74b563ee1b85dde3ed1f7cb87d3dbd
+Repository: https://github.com/alacritty/vte
+Published VCS commit: 3b3da71c34cc1256c7e20981cf03f8eb95e08ffc
+License: Apache-2.0 OR MIT; original LICENSE-APACHE and LICENSE-MIT included.
+
+Copied from the verified published archive: src/, license files, normalized
+Cargo.toml and .cargo_vcs_info.json. No registry-cache files were modified.
+Other upstream documentation, examples, fixtures and lockfile are omitted.
+Cargo.toml only removes references to the omitted readme and example target.
+All dependency versions/features are unchanged.
+
+Local modifications (2026-11-20):
+- src/lib.rs: opt-in OSC payload counter/limit, pre-dispatch fatal latch,
+  and refusal of subsequent parsing after overflow. Separators count.
+- src/ansi.rs: expose that limit/latch through Processor and stop its
+  processing loop on overflow; synchronized buffering/flush is unchanged.
+All other distributed source bytes are identical to the archive. Compare
+these two files and Cargo.toml against the archive for the complete delta.

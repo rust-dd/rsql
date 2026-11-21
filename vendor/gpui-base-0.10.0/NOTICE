@@ -1,0 +1,58 @@
+gpui-base-0.10.0 local source distribution
+
+Upstream repository  https://github.com/longbridge/gpui-kit
+Upstream revision    f697c3133d55c64fa8a5b67926147fb3dadd276d (crates/base)
+Crates.io archive    gpui-base-0.10.0.crate
+Archive SHA-256      4f4e5aff50636223b268a687ad5788ec54fa77c8e57ca9e53d158f19e0425d95
+Archive bytes        1140325
+License              Apache-2.0 (original LICENSE-APACHE, SHA-256 d1b0449e5478c574ba4f686c2656df7fe77d66821a61f8b6ed3378a58ed9a811)
+
+The normalized Cargo manifest preserves the published dependency declarations,
+targets and feature definitions. The distribution includes the original Rust
+source, target source, data and fixtures. 211 payloads are byte-for-byte
+identical to the archive. The omitted archive entries are:
+
+  .cargo_vcs_info.json
+  Cargo.lock
+  Cargo.toml.orig
+  README.md
+  src/input/README.md
+  src/input/editor/display_map/README.md
+
+RSQL changes (2026-11-21), relative to the archive, including file notices:
+  Cargo.toml (+2/-1)
+    Omit the package readme from this local distribution.
+  src/input/base/a11y_text.rs (+13/-0)
+    Expose the native source text runs to test-support.
+  src/input/base/cursor.rs (+9/-2)
+    Keep adjacent linked edit targets separate while merging ordinary touching ranges and coincident carets.
+  src/input/base/element.rs (+435/-172)
+    Resolve source/caret geometry, vertical follow, visible rows, local paint and shaped-line observations.
+  src/input/base/state.rs (+141/-9)
+    Own the optional editor paint and projection, map native geometry and read or atomically replace peer selections.
+  src/input/editor/display_map/display_map.rs (+55/-17)
+    Translate source offsets and folded/wrapped display positions during projection.
+  src/input/editor/display_map/inline_line.rs (+73/-1)
+    Track source endpoints and paint projected text with its native geometry.
+  src/input/editor/display_map/mod.rs (+3/-0)
+    Wire editor presentation and display-map types into the input modules.
+  src/input/editor/display_map/projection.rs (+369/-0)
+    Project multiline source replacements and preserve text positions at their boundaries.
+  src/input/editor/display_map/rows.rs (+109/-0)
+    Index style runs and retain visible projected rows.
+  src/input/editor/display_map/text_wrapper/measurements.rs (+4/-0)
+    Read cached width measurements for bounded wrapping.
+  src/input/editor/display_map/text_wrapper.rs (+403/-45)
+    Shape and cache projected rows and index visible indentation scope.
+  src/input/editor/display_map/wrap_map.rs (+8/-4)
+    Pass the editor preview through wrapping and update projected owners.
+  src/input/editor/indent.rs (+73/-28)
+    Resolve and paint scoped active and inactive indent guides.
+  src/input/editor/lsp/completions.rs (+7/-3)
+    Coordinate provider inline completions with the active preview.
+  src/input/editor/presentation.rs (+117/-0)
+    Define editor-local paint and multiline source-range previews.
+  src/input/mod.rs (+7/-0)
+    Wire editor presentation and display-map types into the input modules.
+  src/input/observations.rs (+54/-0)
+    Observe shaping, paint, layouts and work under test-support.

@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=RSQL
+Comment=Modern SQL Client
+Exec=rsql-desktop
+Icon=rsql-desktop
+Categories=Development;Database;
+StartupWMClass=com.rust-dd.rsql
+Terminal=false

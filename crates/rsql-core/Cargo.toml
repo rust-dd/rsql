@@ -1,0 +1,53 @@
+[package]
+name = "rsql-core"
+version = "0.1.0"
+description = "Shared query engine and local storage for RSQL desktop applications"
+edition = "2024"
+rust-version = "1.95"
+license = "MIT"
+publish = false
+
+[features]
+structure = ["dep:deadpool", "dep:pg_query"]
+
+[dependencies]
+bytes = { workspace = true }
+chrono = { workspace = true }
+csv = { workspace = true }
+deadpool = { workspace = true, optional = true }
+deadpool-postgres = { workspace = true }
+futures-util = { workspace = true }
+hex = { workspace = true }
+libsql = { workspace = true }
+native-tls = { workspace = true }
+pg_query = { workspace = true, optional = true }
+portable-pty = { workspace = true }
+postgres-native-tls = { workspace = true }
+rand = { workspace = true }
+rayon = { workspace = true }
+russh = { workspace = true }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sha2 = { workspace = true }
+sysinfo = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true }
+tokio-postgres = { workspace = true }
+tracing = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true, features = ["serde"] }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+mach2 = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+winapi-util = { workspace = true }
+
+[dev-dependencies]
+base64 = { workspace = true }
+minisign-verify = { workspace = true }
+tempfile = { workspace = true }

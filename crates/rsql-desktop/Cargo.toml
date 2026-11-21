@@ -1,0 +1,136 @@
+[package]
+name = "rsql-desktop"
+version = "2.0.0"
+edition = "2024"
+rust-version = "1.98"
+license = "MIT"
+publish = false
+
+[features]
+production = []
+
+[dependencies]
+alacritty_terminal = { workspace = true }
+base64 = { workspace = true }
+chrono = { workspace = true }
+crc32fast = { workspace = true }
+csv-core = { workspace = true }
+dirs = { workspace = true }
+flate2 = { workspace = true, features = ["rust_backend"] }
+futures-util = { workspace = true }
+geozero = { workspace = true }
+gpui-kit = { workspace = true }
+hex = { workspace = true }
+http-cache-rules = { workspace = true }
+icu_collator = { workspace = true }
+icu_locale_core = { workspace = true }
+icu_properties = { workspace = true }
+image = { workspace = true }
+libsql = { workspace = true }
+lsp-types = { workspace = true }
+minisign-verify = { workspace = true }
+object = { workspace = true, features = ["macho", "read_core"] }
+percent-encoding = { workspace = true }
+plist = { workspace = true }
+png = { workspace = true }
+reqwest = { workspace = true }
+rfd = { workspace = true }
+ropey = { workspace = true }
+roxmltree = { workspace = true }
+rsql-core = { workspace = true, features = ["structure"] }
+semver = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true, features = ["arbitrary_precision", "raw_value", "unbounded_depth"] }
+serde_stacker = { workspace = true }
+sha2 = { workspace = true }
+sqlformat = { workspace = true }
+sqlparser = { workspace = true }
+sum-tree = { workspace = true }
+sys-locale = { workspace = true }
+tar = { workspace = true }
+tempfile = { workspace = true }
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["io-util", "process"] }
+tree-sitter = { workspace = true }
+tree-sitter-postgres = { workspace = true }
+tree-sitter-sequel = { workspace = true }
+url = { workspace = true }
+uuid = { workspace = true }
+
+[target.'cfg(not(any(target_os = "macos", windows)))'.dependencies]
+num-format = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+block2 = { workspace = true }
+gpui-pre-macos = { workspace = true }
+objc2-app-kit = { workspace = true }
+objc2-foundation = { workspace = true, features = ["NSProcessInfo"] }
+objc2-user-notifications = { workspace = true }
+
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[target.'cfg(windows)'.dependencies]
+windows = { workspace = true }
+
+[package.metadata.packager]
+product-name = "RSQL"
+identifier = "com.rust-dd.rsql"
+description = "Modern SQL Client"
+authors = ["rust-dd"]
+publisher = "rust-dd"
+homepage = "https://github.com/rust-dd/rust-sql"
+category = "DeveloperTool"
+binaries = [{ path = "rsql-desktop", main = true }]
+icons = [
+    "packaging/icons/icon.icns",
+    "packaging/icons/icon.ico",
+    "packaging/icons/32x32.png",
+    "packaging/icons/128x128.png",
+    "packaging/icons/128x128@2x.png",
+]
+
+[package.metadata.packager.macos]
+# The updater requires this, LSMinimumSystemVersion and the Mach-O deployment target to agree.
+minimum-system-version = "15.0"
+
+[package.metadata.packager.deb]
+package-name = "rsql"
+desktop-template = "packaging/linux/rsql.desktop"
+section = "devel"
+depends = [
+    "libc6",
+    "libfontconfig1",
+    "libgtk-3-0",
+    "libssl3",
+    "libvulkan1",
+    "libwayland-client0",
+    "libx11-6",
+    "libx11-xcb1",
+    "libxcb1",
+    "libxkbcommon-x11-0",
+    "libxkbcommon0",
+]
+
+[package.metadata.packager.nsis]
+installer-icon = "packaging/icons/icon.ico"
+
+[package.metadata.generate-rpm]
+name = "rsql"
+summary = "Modern SQL Client"
+url = "https://github.com/rust-dd/rust-sql"
+assets = [
+    { source = "target/release/rsql-desktop", dest = "/usr/bin/rsql-desktop", mode = "755" },
+    { source = "packaging/linux/rsql.desktop", dest = "/usr/share/applications/rsql-desktop.desktop", mode = "644" },
+    { source = "packaging/icons/32x32.png", dest = "/usr/share/icons/hicolor/32x32/apps/rsql-desktop.png", mode = "644" },
+    { source = "packaging/icons/128x128.png", dest = "/usr/share/icons/hicolor/128x128/apps/rsql-desktop.png", mode = "644" },
+    { source = "packaging/icons/128x128@2x.png", dest = "/usr/share/icons/hicolor/256x256/apps/rsql-desktop.png", mode = "644" },
+]
+
+# Soname capabilities resolve on every RPM distribution; GPUI loads these at runtime.
+[package.metadata.generate-rpm.requires]
+"libfontconfig.so.1()(64bit)" = "*"
+"libvulkan.so.1()(64bit)" = "*"
+"libwayland-client.so.0()(64bit)" = "*"
+"libxkbcommon-x11.so.0()(64bit)" = "*"
+"libxkbcommon.so.0()(64bit)" = "*"

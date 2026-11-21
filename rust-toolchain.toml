@@ -1,0 +1,6 @@
+# Pinned rather than tracking `stable`, so a new toolchain cannot introduce
+# clippy lints that fail CI or change a release build without anyone choosing
+# to. Bump deliberately. Requires >= 1.88 for edition 2024 let-chains.
+[toolchain]
+channel = "1.98.0"
+components = ["clippy", "rustfmt"]

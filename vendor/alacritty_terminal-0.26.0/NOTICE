@@ -1,0 +1,48 @@
+RSQL local source distribution of alacritty_terminal 0.26.0
+Upstream: https://crates.io/api/v1/crates/alacritty_terminal/0.26.0/download
+Archive SHA-256: bda177466b9524d59f1b12f0dd30b68696788e9992a7e959021c4a0ed96fcf59
+Repository: https://github.com/alacritty/alacritty
+Published VCS commit: 94e7c8874e526b1e67b349d9ba30ddf81669119e
+Published VCS subdirectory: alacritty_terminal
+License: Apache-2.0; original LICENSE-APACHE included.
+
+Copied from the verified published archive: src/, license file, normalized
+Cargo.toml and .cargo_vcs_info.json. No registry-cache files were modified.
+Other upstream documentation, reference fixtures and lockfile are omitted.
+Cargo.toml only removes references to the omitted readme and test target.
+All dependency versions/features are unchanged.
+
+Local modifications (2026-11-20):
+- src/term/mod.rs: opt-in Config.combining_limit, checked on the library's
+  chosen target cell before appending each additional zero-width scalar.
+- src/event.rs: typed CombiningLimitExceeded event for rejected input.
+  RSQL treats this event as fatal. The default combining limit remains disabled.
+- src/term/mod.rs and src/selection.rs route selections through grid reflow.
+  src/selection/reflow.rs maps anchor sides and clips removed endpoints.
+  Removed row suffixes stay distinguishable from retained endpoint cells.
+  Word/line selections retain cropped bounds separately from their directed
+  gesture anchors. Row erasure intersects an active extent. An intact resize
+  leaves matching native word/line bounds live across character edits.
+  src/selection/rotation.rs moves the anchors and surviving bounds through
+  the scroll region and history. It resolves live word/line bounds before
+  rows move and retains the mapped range if it splits, loses cells, or new
+  neighbors change the native expansion. A gesture update re-expands from
+  the fixed anchor.
+  Block selection uses ordered cell edges for its half-open column interval.
+  Copying a selected wrap placeholder reads the following wide cluster.
+- src/term/cell.rs and src/term/mod.rs mark horizontal-tab padding in a cell
+  flag during tab motion. Copy suppresses that padding across soft wraps when
+  the tab itself is in the selection.
+- src/term/selection_text.rs shares native selection extraction with a byte-limited copy
+  path. It checks one native row at a time before appending to the result.
+- src/grid/mod.rs, src/grid/resize.rs and src/grid/reflow.rs track selection
+  coordinates (up to four for word/line gestures) through the existing row moves and history limit.
+
+- src/term/cell_edit.rs and src/term/mod.rs preserve paired wide cells and the
+  physical wrap margin across column insert, delete and erase. Deletes stay
+  inside the cursor suffix. Rendering and extraction validate the wide lead.
+- src/grid/row.rs gives published row contents an opaque, lazily assigned
+  identity. Row moves preserve it. Edits, reuse and clones invalidate it.
+  src/grid/storage.rs swaps the complete row independent of its layout.
+
+All other distributed Rust source bytes match the published archive.

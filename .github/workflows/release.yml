@@ -10,6 +10,16 @@ on:
         required: true
         type: string
 
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_TARGET_DIR: target
+  CARGO_PACKAGER_VERSION: "0.11.8"
+  CARGO_GENERATE_RPM_VERSION: "0.21.1"
+  RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+
 jobs:
   verify-version:
     runs-on: ubuntu-latest
@@ -24,17 +34,9 @@ jobs:
         with:
           node-version-file: .node-version
       - name: Verify tag and version
-        env:
-          RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
         run: node scripts/check-version.mjs --tag "$RELEASE_TAG"
       - id: revision
         run: echo "sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
-
-  frontend:
-    needs: verify-version
-    uses: ./.github/workflows/frontend.yml
-    with:
-      revision: ${{ needs.verify-version.outputs.revision }}
 
   rust:
     needs: verify-version
@@ -42,81 +44,59 @@ jobs:
     with:
       revision: ${{ needs.verify-version.outputs.revision }}
 
-  release:
-    needs: [verify-version, frontend, rust]
-    permissions:
-      contents: write
+  package:
+    needs: [verify-version, rust]
     strategy:
       fail-fast: false
       matrix:
         include:
-          - platform: macos-latest
-            args: --target aarch64-apple-darwin
+          - runner: macos-15
             target: aarch64-apple-darwin
-          - platform: macos-latest
-            args: --target x86_64-apple-darwin
+            arch: aarch64
+          - runner: macos-15-intel
             target: x86_64-apple-darwin
-          - platform: ubuntu-22.04
-            args: ""
-          - platform: windows-latest
-            args: ""
-    runs-on: ${{ matrix.platform }}
-
+            arch: x64
+          - runner: windows-2025
+            target: x86_64-pc-windows-msvc
+          - runner: ubuntu-22.04
+            target: x86_64-unknown-linux-gnu
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 150
+    defaults:
+      run:
+        shell: bash
     env:
-      # Rolling the editor and the ANTLR SQL grammar into a bundle needs more
-      # than the ~2 GB a runner defaults to, and the failure is an out-of-memory
-      # crash rather than anything that names itself.
-      NODE_OPTIONS: --max-old-space-size=4096
-      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+      REVISION: ${{ needs.verify-version.outputs.revision }}
+      BIN: target/${{ matrix.target }}/release
+      # Git Bash would otherwise rewrite path-like arguments passed to cargo-packager on Windows.
+      MSYS_NO_PATHCONV: "1"
 
     steps:
       - uses: actions/checkout@v7
         with:
           ref: ${{ needs.verify-version.outputs.revision }}
-          fetch-depth: 0
 
-      - name: Setup Node
-        uses: actions/setup-node@v7
-        with:
-          node-version-file: .node-version
-
-      - name: Install Rust targets
-        if: matrix.platform == 'macos-latest'
-        # Run where rust-toolchain.toml applies: from the repository root
-        # rustup adds the targets to the runner's default toolchain, not to the
-        # pinned one the build actually uses, and the cross build then fails
-        # with "target is not installed".
-        working-directory: src-tauri
-        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
-
-      - name: Install dependencies (ubuntu only)
-        if: matrix.platform == 'ubuntu-22.04'
+      - name: Install Linux build dependencies
+        if: runner.os == 'Linux'
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgtk-3-dev libwebkit2gtk-4.1-dev libayatana-appindicator3-dev librsvg2-dev libjavascriptcoregtk-4.1-dev gnupg rpm
+          sudo apt-get install -y clang file libfontconfig-dev libgtk-3-dev libssl-dev libvulkan1 libwayland-dev libx11-xcb-dev libxkbcommon-x11-dev libzstd-dev rpm
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@v2
+      - uses: swatinem/rust-cache@v2
         with:
-          workspaces: "./src-tauri -> target"
+          key: ${{ matrix.target }}
 
-      - name: Install frontend dependencies
-        run: yarn install --frozen-lockfile
-
-      - name: Version consistency
-        shell: bash
-        run: node scripts/check-version.mjs --tag "$RELEASE_TAG"
-
-      - name: Resolve release tag
-        id: release_meta
-        shell: bash
-        run: |
-          echo "tag=$RELEASE_TAG" >> "$GITHUB_OUTPUT"
-
-      - name: Validate updater signing secrets
-        shell: bash
+      - name: Install packaging tools
         env:
-          PLATFORM: ${{ matrix.platform }}
+          CARGO_TARGET_DIR: ${{ runner.temp }}/tools
+        run: |
+          cargo install cargo-packager --version "$CARGO_PACKAGER_VERSION" --locked
+          if [ "$RUNNER_OS" = Linux ]; then
+            cargo install cargo-generate-rpm --version "$CARGO_GENERATE_RPM_VERSION" --locked
+          fi
+
+      - name: Validate signing secrets
+        env:
           TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
@@ -124,94 +104,17 @@ jobs:
           TAURI_SIGNING_RPM_KEY: ${{ secrets.TAURI_SIGNING_RPM_KEY }}
           APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.APPIMAGETOOL_SIGN_PASSPHRASE }}
         run: |
-          [ -n "$TAURI_UPDATER_PUBLIC_KEY" ] || { echo "Missing TAURI_UPDATER_PUBLIC_KEY secret."; exit 1; }
-          [ -n "$TAURI_SIGNING_PRIVATE_KEY" ] || { echo "Missing TAURI_SIGNING_PRIVATE_KEY secret."; exit 1; }
-
-          case "$PLATFORM" in
-            windows-latest)
-              [ -n "$WINDOWS_CERTIFICATE" ] || { echo "Missing WINDOWS_CERTIFICATE secret."; exit 1; }
-              [ -n "$WINDOWS_CERTIFICATE_PASSWORD" ] || { echo "Missing WINDOWS_CERTIFICATE_PASSWORD secret."; exit 1; }
-              ;;
-            ubuntu-22.04)
-              [ -n "$TAURI_SIGNING_RPM_KEY" ] || { echo "Missing TAURI_SIGNING_RPM_KEY secret."; exit 1; }
-              [ -n "$APPIMAGETOOL_SIGN_PASSPHRASE" ] || { echo "Missing APPIMAGETOOL_SIGN_PASSPHRASE secret."; exit 1; }
-              ;;
+          required=(TAURI_UPDATER_PUBLIC_KEY TAURI_SIGNING_PRIVATE_KEY)
+          case "$RUNNER_OS" in
+            Windows) required+=(WINDOWS_CERTIFICATE WINDOWS_CERTIFICATE_PASSWORD) ;;
+            Linux) required+=(TAURI_SIGNING_RPM_KEY APPIMAGETOOL_SIGN_PASSPHRASE) ;;
           esac
-
-      - name: Inject updater public key into Tauri config
-        shell: bash
-        env:
-          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
-        run: |
-          node -e 'const fs=require("fs"); const path="src-tauri/tauri.conf.json"; const config=JSON.parse(fs.readFileSync(path,"utf8")); config.plugins ??= {}; config.plugins.updater ??= {}; config.plugins.updater.pubkey = process.env.TAURI_UPDATER_PUBLIC_KEY; fs.writeFileSync(path, JSON.stringify(config, null, 2) + "\n");'
-
-      - name: Import Windows signing certificate
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        env:
-          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
-          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-        run: |
-          New-Item -ItemType Directory -Path certificate -Force | Out-Null
-          Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE -NoNewline
-          certutil -decode certificate/tempCert.txt certificate/certificate.pfx | Out-Null
-          Remove-Item -Path certificate/tempCert.txt
-
-          $certificate = Import-PfxCertificate `
-            -FilePath certificate/certificate.pfx `
-            -CertStoreLocation Cert:\CurrentUser\My `
-            -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)
-
-          if (-not $certificate) {
-            Write-Error "Failed to import Windows signing certificate."
-            exit 1
-          }
-
-          "WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
-
-      - name: Configure Windows signing
-        if: matrix.platform == 'windows-latest'
-        shell: pwsh
-        env:
-          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
-        run: |
-          $configPath = "src-tauri/tauri.conf.json"
-          $config = Get-Content -Path $configPath -Raw | ConvertFrom-Json
-          $timestampUrl = if ($env:WINDOWS_TIMESTAMP_URL) { $env:WINDOWS_TIMESTAMP_URL } else { "http://timestamp.digicert.com" }
-
-          if (-not $env:WINDOWS_CERTIFICATE_THUMBPRINT) {
-            Write-Error "Missing imported Windows certificate thumbprint."
-            exit 1
-          }
-
-          if (-not $config.bundle) {
-            $config | Add-Member -NotePropertyName bundle -NotePropertyValue ([PSCustomObject]@{})
-          }
-
-          if (-not $config.bundle.PSObject.Properties["windows"]) {
-            $config.bundle | Add-Member -NotePropertyName windows -NotePropertyValue ([PSCustomObject]@{})
-          }
-
-          $config.bundle.windows = [PSCustomObject]@{
-            certificateThumbprint = $env:WINDOWS_CERTIFICATE_THUMBPRINT
-            digestAlgorithm = "sha256"
-            timestampUrl = $timestampUrl
-          }
-
-          $config | ConvertTo-Json -Depth 100 | Set-Content -Path $configPath -Encoding utf8NoBOM
-
-      - name: Import Linux signing key (AppImage + RPM)
-        if: matrix.platform == 'ubuntu-22.04'
-        env:
-          TAURI_SIGNING_RPM_KEY: ${{ secrets.TAURI_SIGNING_RPM_KEY }}
-        run: |
-          mkdir -p "$HOME/.gnupg"
-          chmod 700 "$HOME/.gnupg"
-          printf '%s' "${TAURI_SIGNING_RPM_KEY}" | gpg --batch --import
+          for name in "${required[@]}"; do
+            [ -n "${!name}" ] || { echo "::error::Missing $name secret."; exit 1; }
+          done
 
       - name: Configure macOS signing and notarization
-        if: matrix.platform == 'macos-latest'
-        shell: bash
+        if: runner.os == 'macOS'
         env:
           MACOS_SIGNING_ENABLED: ${{ vars.MACOS_SIGNING_ENABLED }}
           APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
@@ -250,75 +153,262 @@ jobs:
             exit 1
           fi
 
+          # cargo-packager reads the certificate and notarization credentials from these variables.
           for name in "${required[@]}"; do
             printf '%s=%s\n' "$name" "${!name}" >> "$GITHUB_ENV"
           done
 
-      - uses: tauri-apps/tauri-action@v1
+      - name: Import Windows signing certificate
+        if: runner.os == 'Windows'
+        shell: pwsh
         env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
-          SIGN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
-          APPIMAGETOOL_FORCE_SIGN: ${{ matrix.platform == 'ubuntu-22.04' && '1' || '' }}
-          SIGN_KEY: ${{ secrets.SIGN_KEY }}
-          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.APPIMAGETOOL_SIGN_PASSPHRASE }}
+        run: |
+          New-Item -ItemType Directory -Path certificate -Force | Out-Null
+          Set-Content -Path certificate/tempCert.txt -Value $env:WINDOWS_CERTIFICATE -NoNewline
+          certutil -decode certificate/tempCert.txt certificate/certificate.pfx | Out-Null
+          Remove-Item -Path certificate/tempCert.txt
+
+          $certificate = Import-PfxCertificate `
+            -FilePath certificate/certificate.pfx `
+            -CertStoreLocation Cert:\CurrentUser\My `
+            -Password (ConvertTo-SecureString -String $env:WINDOWS_CERTIFICATE_PASSWORD -Force -AsPlainText)
+          Remove-Item -Path certificate -Recurse -Force
+
+          if (-not $certificate) {
+            Write-Error "Failed to import Windows signing certificate."
+            exit 1
+          }
+
+          "WINDOWS_CERTIFICATE_THUMBPRINT=$($certificate.Thumbprint)" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Import Linux signing key (AppImage + RPM)
+        if: runner.os == 'Linux'
+        env:
           TAURI_SIGNING_RPM_KEY: ${{ secrets.TAURI_SIGNING_RPM_KEY }}
-          TAURI_SIGNING_RPM_KEY_PASSPHRASE: ${{ secrets.TAURI_SIGNING_RPM_KEY_PASSPHRASE }}
-        with:
-          tagName: ${{ steps.release_meta.outputs.tag }}
-          releaseName: "RSQL ${{ steps.release_meta.outputs.tag }}"
-          releaseBody: "See the assets to download and install this version."
-          releaseDraft: true
-          prerelease: ${{ contains(steps.release_meta.outputs.tag, '-rc') }}
-          args: ${{ matrix.args }} -- --locked
-          tauriScript: npx tauri
-
-      - name: Verify macOS signature and notarization ticket
-        if: matrix.platform == 'macos-latest' && vars.MACOS_SIGNING_ENABLED == 'true'
-        shell: bash
-        env:
-          APP_BUNDLE: src-tauri/target/${{ matrix.target }}/release/bundle/macos/rsql.app
         run: |
-          codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
-          spctl --assess --type execute --verbose=4 "$APP_BUNDLE"
-          xcrun stapler validate "$APP_BUNDLE"
+          mkdir -p "$HOME/.gnupg"
+          chmod 700 "$HOME/.gnupg"
+          printf '%s' "$TAURI_SIGNING_RPM_KEY" | gpg --batch --import
 
-      - name: Notarize, verify and replace the macOS disk image
-        if: matrix.platform == 'macos-latest' && vars.MACOS_SIGNING_ENABLED == 'true'
-        shell: bash
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          DMG_DIRECTORY: src-tauri/target/${{ matrix.target }}/release/bundle/dmg
+      - name: Write packager configuration
         run: |
-          shopt -s nullglob
-          disk_images=("$DMG_DIRECTORY"/*.dmg)
-          if [ "${#disk_images[@]}" -eq 0 ]; then
-            echo "::error::No macOS disk image was produced."
+          # Forward-slash absolute paths work for both Git Bash and native Windows tools.
+          root=$(pwd -W 2>/dev/null || pwd)
+          mkdir -p dist packages
+          printf 'DIST=%s\nPACKAGES=%s\n' "$root/dist" "$root/packages" >> "$GITHUB_ENV"
+          cargo metadata --format-version 1 --no-deps --locked > "$RUNNER_TEMP/metadata.json"
+          jq -c --arg version "${RELEASE_TAG#v}" --arg bin "$root/$BIN" --arg out "$root/packages" '
+            .packages[] | select(.name == "rsql-desktop") | .metadata.packager
+            | .version = $version | .["binaries-dir"] = $bin | .["out-dir"] = $out
+          ' "$RUNNER_TEMP/metadata.json" > "$RUNNER_TEMP/packager.json"
+          if [ "$RUNNER_OS" = macOS ]; then
+            echo "MACOSX_DEPLOYMENT_TARGET=$(jq -r '.macos["minimum-system-version"]' "$RUNNER_TEMP/packager.json")" >> "$GITHUB_ENV"
+          fi
+
+      - name: Build
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+          RSQL_BUILD_REVISION: ${{ env.REVISION }}
+        run: |
+          cargo build -p rsql-desktop --release --features production --locked --target ${{ matrix.target }}
+          output=$("$BIN/rsql-desktop" --help 2>&1 || true)
+          [[ "$output" == *"Usage: rsql-desktop"* ]] || { echo "::error::The release binary did not start: $output"; exit 1; }
+
+      - name: Package macOS app and disk image
+        if: runner.os == 'macOS'
+        working-directory: crates/rsql-desktop
+        run: |
+          plist="$RUNNER_TEMP/Info.plist"
+          plutil -create xml1 "$plist"
+          plutil -insert RSQLBuildRevision -string "$REVISION" "$plist"
+          config=$(jq -c --arg plist "$plist" --arg identity "${APPLE_SIGNING_IDENTITY:-}" '
+            .macos["info-plist-path"] = $plist
+            | if $identity == "" then . else .macos["signing-identity"] = $identity end
+          ' "$RUNNER_TEMP/packager.json")
+          cargo packager --config "$config" --formats app,dmg
+
+      - name: Verify macOS bundle identity
+        if: runner.os == 'macOS'
+        run: |
+          app="$PACKAGES/RSQL.app"
+          read_key() { plutil -extract "$1" raw "$app/Contents/Info.plist"; }
+          [ "$(read_key CFBundleIdentifier)" = com.rust-dd.rsql ]
+          [ "$(read_key CFBundleExecutable)" = rsql-desktop ]
+          [ "$(read_key CFBundleShortVersionString)" = "${RELEASE_TAG#v}" ]
+          [ "$(read_key RSQLBuildRevision)" = "$REVISION" ]
+          [ "$(read_key LSMinimumSystemVersion)" = "$MACOSX_DEPLOYMENT_TARGET" ]
+          vtool -show-build "$app/Contents/MacOS/rsql-desktop" | grep -E "minos ${MACOSX_DEPLOYMENT_TARGET}$"
+          if [ -n "$(find "$app" -type l)" ]; then
+            echo "::error::The updater rejects symbolic links inside RSQL.app."
             exit 1
           fi
 
-          for disk_image in "${disk_images[@]}"; do
-            report=$(mktemp "$RUNNER_TEMP/rsql-notarization.XXXXXX")
-            xcrun notarytool submit "$disk_image" \
-              --apple-id "$APPLE_ID" \
-              --password "$APPLE_PASSWORD" \
-              --team-id "$APPLE_TEAM_ID" \
-              --wait --timeout 30m --output-format json > "$report"
-            cat "$report"
-            if ! jq -e '.status == "Accepted"' "$report" > /dev/null; then
-              echo "::error::Apple did not accept the disk image for notarization."
-              exit 1
-            fi
+      - name: Verify macOS signature and notarization ticket
+        if: runner.os == 'macOS' && vars.MACOS_SIGNING_ENABLED == 'true'
+        run: |
+          app="$PACKAGES/RSQL.app"
+          codesign --verify --deep --strict --verbose=2 "$app"
+          codesign --display --verbose=2 "$app" 2>&1 | grep 'flags=.*runtime'
+          spctl --assess --type execute --verbose=4 "$app"
+          xcrun stapler validate "$app"
 
-            xcrun stapler staple "$disk_image"
-            xcrun stapler validate "$disk_image"
-            codesign --verify --strict --verbose=2 "$disk_image"
-            spctl --assess --type open --context context:primary-signature --verbose=4 "$disk_image"
+      - name: Notarize and verify the macOS disk image
+        if: runner.os == 'macOS' && vars.MACOS_SIGNING_ENABLED == 'true'
+        run: |
+          disk_image="$PACKAGES/RSQL_${RELEASE_TAG#v}_${{ matrix.arch }}.dmg"
+          report=$(mktemp "$RUNNER_TEMP/rsql-notarization.XXXXXX")
+          xcrun notarytool submit "$disk_image" \
+            --apple-id "$APPLE_ID" \
+            --password "$APPLE_PASSWORD" \
+            --team-id "$APPLE_TEAM_ID" \
+            --wait --timeout 30m --output-format json > "$report"
+          cat "$report"
+          if ! jq -e '.status == "Accepted"' "$report" > /dev/null; then
+            echo "::error::Apple did not accept the disk image for notarization."
+            exit 1
+          fi
+          xcrun stapler staple "$disk_image"
+          xcrun stapler validate "$disk_image"
+          codesign --verify --strict --verbose=2 "$disk_image"
+          spctl --assess --type open --context context:primary-signature --verbose=4 "$disk_image"
+
+      - name: Collect macOS artifacts
+        if: runner.os == 'macOS'
+        run: |
+          mv "$PACKAGES/RSQL_${RELEASE_TAG#v}_${{ matrix.arch }}.dmg" "$DIST/"
+          # The updater only accepts plain ustar entries: no pax headers, xattrs or AppleDouble files.
+          COPYFILE_DISABLE=1 tar --format ustar --no-xattrs --no-mac-metadata -czf \
+            "$DIST/RSQL_${RELEASE_TAG#v}_${{ matrix.arch }}.app.tar.gz" -C "$PACKAGES" RSQL.app
+
+      - name: Package Windows installer
+        if: runner.os == 'Windows'
+        working-directory: crates/rsql-desktop
+        env:
+          WINDOWS_TIMESTAMP_URL: ${{ secrets.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          config=$(jq -c --arg thumbprint "$WINDOWS_CERTIFICATE_THUMBPRINT" \
+            --arg timestamp "${WINDOWS_TIMESTAMP_URL:-http://timestamp.digicert.com}" '
+            .windows = {"certificate-thumbprint": $thumbprint, "digest-algorithm": "sha256", "timestamp-url": $timestamp}
+          ' "$RUNNER_TEMP/packager.json")
+          cargo packager --config "$config" --formats nsis
+          mv "$PACKAGES"/*-setup.exe "$DIST/"
+
+      - name: Package Linux bundles
+        if: runner.os == 'Linux'
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+          SIGN: "1"
+          APPIMAGETOOL_FORCE_SIGN: "1"
+          SIGN_KEY: ${{ secrets.SIGN_KEY }}
+          APPIMAGETOOL_SIGN_PASSPHRASE: ${{ secrets.APPIMAGETOOL_SIGN_PASSPHRASE }}
+          TAURI_SIGNING_RPM_KEY_PASSPHRASE: ${{ secrets.TAURI_SIGNING_RPM_KEY_PASSPHRASE }}
+        run: |
+          (cd crates/rsql-desktop && cargo packager --config "$(cat "$RUNNER_TEMP/packager.json")" --formats deb,appimage)
+          mv "$PACKAGES"/*.deb "$PACKAGES"/*.AppImage "$DIST/"
+
+          # RPM versions cannot contain "-"; "~" sorts a prerelease before its release.
+          cargo generate-rpm -p crates/rsql-desktop --target ${{ matrix.target }} -o "$DIST/" \
+            --set-metadata "version = \"$(tr - '~' <<< "${RELEASE_TAG#v}")\""
+          key=$(gpg --list-secret-keys --with-colons | awk -F: '/^sec/ { print $5; exit }')
+          printf '%s' "$TAURI_SIGNING_RPM_KEY_PASSPHRASE" > "$RUNNER_TEMP/rpm-passphrase"
+          rpmsign --addsign --define "_gpg_name $key" \
+            --define "_gpg_sign_cmd_extra_args --pinentry-mode loopback --passphrase-file $RUNNER_TEMP/rpm-passphrase" \
+            "$DIST"/*.rpm
+          rm "$RUNNER_TEMP/rpm-passphrase"
+          signature=$(rpm -qp --qf '%|DSAHEADER?{%{DSAHEADER:pgpsig}}:{%|RSAHEADER?{%{RSAHEADER:pgpsig}}:{(none)}|}|' "$DIST"/*.rpm)
+          echo "RPM signature: $signature"
+          [ "$signature" != "(none)" ]
+
+      - name: Sign updater artifacts
+        env:
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          shopt -s nullglob
+          for file in "$DIST"/*.app.tar.gz "$DIST"/*.exe "$DIST"/*.AppImage "$DIST"/*.deb "$DIST"/*.rpm; do
+            cargo packager signer sign "$file"
           done
+          ls -l "$DIST"
 
-          # tauri-action uploaded the DMG before its ticket was attached.
-          gh release upload "$RELEASE_TAG" "${disk_images[@]}" --clobber
+      - uses: actions/upload-artifact@v7
+        with:
+          name: packages-${{ matrix.target }}
+          path: dist/
+          if-no-files-found: error
+          retention-days: 7
+
+  publish:
+    needs: [verify-version, package]
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: write
+    env:
+      REVISION: ${{ needs.verify-version.outputs.revision }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.verify-version.outputs.revision }}
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .node-version
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libssl-dev
+
+      - uses: swatinem/rust-cache@v2
+
+      - name: Install cargo-packager
+        env:
+          CARGO_TARGET_DIR: ${{ runner.temp }}/tools
+        run: cargo install cargo-packager --version "$CARGO_PACKAGER_VERSION" --locked
+
+      - uses: actions/download-artifact@v8
+        with:
+          pattern: packages-*
+          path: dist
+          merge-multiple: true
+
+      - name: Write and sign the native update inventory
+        env:
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          CARGO_PACKAGER_SIGN_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        run: |
+          minimum=$(cargo metadata --format-version 1 --no-deps --locked \
+            | jq -r '.packages[] | select(.name == "rsql-desktop") | .metadata.packager.macos["minimum-system-version"]')
+          node scripts/native-inventory.mjs dist --repo "$GITHUB_REPOSITORY" --tag "$RELEASE_TAG" \
+            --revision "$REVISION" --macos-minimum "$minimum"
+          cargo packager signer sign dist/inventory.json
+
+      # latest.json serves the native artifacts to installed Tauri builds, which migrate on their next update.
+      - name: Assemble and verify both update feeds
+        env:
+          TAURI_UPDATER_PUBLIC_KEY: ${{ secrets.TAURI_UPDATER_PUBLIC_KEY }}
+        run: |
+          printf '%s' "$TAURI_UPDATER_PUBLIC_KEY" > "$RUNNER_TEMP/updater.pub"
+          cargo run --locked --release -p rsql-core --example release-feeds -- \
+            "$RUNNER_TEMP/updater.pub" dist feeds
+
+      - name: Upload to the draft release
+        run: |
+          assets=()
+          for file in dist/*; do
+            case "$file" in dist/inventory.json*) ;; *) assets+=("$file") ;; esac
+          done
+          assets+=(feeds/latest.json feeds/native-latest.json)
+
+          if draft=$(gh release view "$RELEASE_TAG" --json isDraft --jq .isDraft 2>/dev/null); then
+            [ "$draft" = true ] || { echo "::error::$RELEASE_TAG is already published."; exit 1; }
+            gh release upload "$RELEASE_TAG" "${assets[@]}" --clobber
+          else
+            prerelease=()
+            if [[ "$RELEASE_TAG" == *-* ]]; then prerelease=(--prerelease); fi
+            gh release create "$RELEASE_TAG" "${assets[@]}" --draft --verify-tag "${prerelease[@]}" \
+              --title "RSQL $RELEASE_TAG" --notes "See the assets to download and install this version."
+          fi

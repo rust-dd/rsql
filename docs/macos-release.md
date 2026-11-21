@@ -5,7 +5,7 @@ RSQL can keep distributing DMGs through GitHub Releases. Sign the app with a **D
 ## Project status
 
 - The release workflow already builds Apple Silicon and Intel macOS installers separately.
-- `src-tauri/tauri.conf.json` already enables the hardened runtime and uses the stable bundle identifier `com.rust-dd.rsql`.
+- `cargo-packager` signs with the hardened runtime, and `crates/rsql-desktop/Cargo.toml` keeps the stable bundle identifier `com.rust-dd.rsql`.
 - Updater signatures are configured, but they authenticate updates to RSQL itself; they do not establish trust with Gatekeeper.
 - The Developer ID Application certificate and private key for Gympiper and the notarization credentials are configured in the repository's signing secrets.
 - The repository variable `MACOS_SIGNING_ENABLED` is `true`. The release workflow signs and notarizes both macOS architectures and fails on missing credentials instead of falling back to an unsigned release. Setting the variable to `false` produces unsigned builds and emits a workflow warning.
@@ -27,9 +27,9 @@ An existing Apple Developer Program membership is sufficient. For a new membersh
 
 6. Create an [app-specific password](https://support.apple.com/102654) for the Apple account used for notarization. Use this password, not the account's normal login password. Find the Team ID on the [membership page](https://developer.apple.com/account/#/membership).
 
-Tauri supports these credentials directly and handles certificate import, signing, notarization and stapling during bundling. It also supports App Store Connect API keys; this workflow uses Apple ID authentication, so no `.p8` key file is needed. [Tauri macOS signing](https://v2.tauri.app/distribute/sign/macos/)
+`cargo-packager` uses these credentials to import the certificate, sign, notarize and staple the `.app` during packaging. This workflow uses Apple ID authentication, so no `.p8` key file is needed.
 
-Tauri notarizes the `.app`, but its DMG bundler only signs the outer disk image. The workflow therefore submits the finished DMG separately, requires an `Accepted` result, staples its ticket and checks Gatekeeper before replacing the draft's DMG asset. Apple recommends notarizing the outermost distribution container. [Tauri DMG implementation](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.12.1/crates/tauri-bundler/src/bundle/macos/dmg/mod.rs), [Apple distribution guidance](https://developer.apple.com/forums/thread/125145)
+The workflow also submits the finished DMG separately, requires an `Accepted` result, staples its ticket and checks Gatekeeper. Apple recommends notarizing the outermost distribution container. [Apple distribution guidance](https://developer.apple.com/forums/thread/125145)
 
 ## GitHub configuration
 
@@ -44,7 +44,7 @@ In [repository Actions settings](https://github.com/rust-dd/rsql/settings/secret
 | `APPLE_PASSWORD` | App-specific password for that account |
 | `APPLE_TEAM_ID` | Developer team's ID |
 
-Then add the **repository variable** `MACOS_SIGNING_ENABLED` with the value `true`. The signing identity and Team ID must refer to the same team. Existing Tauri updater secrets are still required. Keep certificate contents and passwords out of source files, release descriptions and chat.
+Then add the **repository variable** `MACOS_SIGNING_ENABLED` with the value `true`. The signing identity and Team ID must refer to the same team. The updater signing secrets are still required. Keep certificate contents and passwords out of source files, release descriptions and chat.
 
 ## Release verification
 

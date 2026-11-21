@@ -1,0 +1,260 @@
+use gpui::{
+    AnyElement, App, ElementId, IntoElement, ParentElement, RenderOnce, SharedString,
+    StyleRefinement, Styled, Window, div, prelude::FluentBuilder as _,
+};
+use smallvec::SmallVec;
+
+use gpui_base::{LogicalStyledExt as _, Toolbar as BaseToolbar, ToolbarGroup as BaseToolbarGroup};
+
+use crate::{Sizable, Size, StyleSized as _, StyledExt as _};
+
+enum ToolbarItem {
+    Sized(Box<dyn FnOnce(Size) -> AnyElement>),
+    Content(AnyElement),
+}
+
+impl ToolbarItem {
+    fn sized(item: impl Sizable + IntoElement + 'static) -> Self {
+        Self::Sized(Box::new(move |size| {
+            item.prepare_for_toolbar()
+                .with_size(size)
+                .into_any_element()
+        }))
+    }
+
+    fn content(content: impl IntoElement) -> Self {
+        Self::Content(content.into_any_element())
+    }
+
+    fn into_element(self, size: Size) -> AnyElement {
+        match self {
+            Self::Sized(item) => div()
+                .flex()
+                .items_center()
+                .input_h(size)
+                .child(item(size))
+                .into_any_element(),
+            Self::Content(content) => content,
+        }
+    }
+}
+
+/// A semantic subgroup of toolbar controls that shares one accessible label
+/// and propagates its size to every control added with `child` or `children`.
+#[derive(IntoElement)]
+pub struct ToolbarGroup {
+    id: ElementId,
+    style: StyleRefinement,
+    size: Size,
+    label: Option<SharedString>,
+    children: SmallVec<[ToolbarItem; 4]>,
+}
+
+impl ToolbarGroup {
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self {
+            id: id.into(),
+            style: StyleRefinement::default(),
+            size: Size::Small,
+            label: None,
+            children: SmallVec::new(),
+        }
+    }
+
+    /// Sets the accessible name announced for the group.
+    pub fn label(mut self, label: impl Into<SharedString>) -> Self {
+        self.label = Some(label.into());
+        self
+    }
+
+    /// Append a control that inherits the group's final size.
+    pub fn child(mut self, child: impl Sizable + IntoElement + 'static) -> Self {
+        self.children.push(ToolbarItem::sized(child));
+        self
+    }
+
+    /// Append controls that inherit the group's final size.
+    pub fn children<T>(mut self, children: impl IntoIterator<Item = T>) -> Self
+    where
+        T: Sizable + IntoElement + 'static,
+    {
+        self.children
+            .extend(children.into_iter().map(ToolbarItem::sized));
+        self
+    }
+
+    /// Append non-sized content to the group.
+    pub fn content(mut self, content: impl IntoElement) -> Self {
+        self.children.push(ToolbarItem::content(content));
+        self
+    }
+}
+
+impl ParentElement for ToolbarGroup {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.children
+            .extend(elements.into_iter().map(ToolbarItem::Content));
+    }
+}
+
+impl Styled for ToolbarGroup {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl Sizable for ToolbarGroup {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = match size.into() {
+            Size::Large => Size::Medium,
+            size => size,
+        };
+        self
+    }
+}
+
+impl RenderOnce for ToolbarGroup {
+    fn render(self, _: &mut Window, _: &mut App) -> impl IntoElement {
+        let size = self.size;
+        BaseToolbarGroup::new(self.id)
+            .when_some(self.label, |this, label| this.label(label))
+            .children(
+                self.children
+                    .into_iter()
+                    .map(|item| item.into_element(size)),
+            )
+            .refine_style(&self.style)
+    }
+}
+
+/// A transparent horizontal container for commands in a window, pane, or
+/// section.
+///
+/// The toolbar owns layout and keyboard behavior while the surrounding header,
+/// tab strip, or custom surface owns its background and border.
+///
+/// The bar exposes `Toolbar` semantics to assistive technology and owns
+/// roving keyboard focus: when focus is on one of its controls, the arrow
+/// keys move focus along the bar, wrapping around at the ends. Hosted inputs
+/// keep their own arrow-key caret behavior; place them at the trailing end of
+/// the bar.
+///
+/// `child` accepts [`Sizable`] controls and automatically applies the toolbar's
+/// final size, regardless of builder order. Use `content` for separators,
+/// labels, flexible spacers, and custom layout. Items render in source order,
+/// matching Base UI's toolbar composition model. An icon-only button must
+/// carry a tooltip and an accessible name.
+///
+/// The id keeps the toolbar's keyboard-focus state stable across frames;
+/// give each toolbar in a window a distinct id.
+///
+/// ```
+/// # mod gpui_kit { pub extern crate gpui_component as component; }
+/// use gpui_kit::component::toolbar::Toolbar;
+///
+/// let _ = Toolbar::new("document-toolbar").content("Document");
+/// ```
+#[derive(IntoElement)]
+pub struct Toolbar {
+    id: ElementId,
+    style: StyleRefinement,
+    size: Size,
+    disabled: bool,
+    items: SmallVec<[ToolbarItem; 4]>,
+}
+
+impl Toolbar {
+    /// Create a new, empty [`Toolbar`] at [`Size::Small`].
+    pub fn new(id: impl Into<ElementId>) -> Self {
+        Self {
+            id: id.into(),
+            style: StyleRefinement::default(),
+            size: Size::Small,
+            disabled: false,
+            items: SmallVec::new(),
+        }
+    }
+
+    /// Disable the toolbar's roving keyboard navigation.
+    /// Hosted controls must be disabled by their owner.
+    pub fn disabled(mut self, disabled: bool) -> Self {
+        self.disabled = disabled;
+        self
+    }
+
+    /// Append a sized control. The toolbar applies its
+    /// final size when it renders, so builder call order does not matter.
+    pub fn child(mut self, child: impl Sizable + IntoElement + 'static) -> Self {
+        self.items.push(ToolbarItem::sized(child));
+        self
+    }
+
+    /// Append sized controls.
+    pub fn children<T>(mut self, children: impl IntoIterator<Item = T>) -> Self
+    where
+        T: Sizable + IntoElement + 'static,
+    {
+        self.items
+            .extend(children.into_iter().map(ToolbarItem::sized));
+        self
+    }
+
+    /// Append non-sized content.
+    pub fn content(mut self, content: impl IntoElement) -> Self {
+        self.items.push(ToolbarItem::content(content));
+        self
+    }
+
+    /// Append non-sized content.
+    pub fn contents(mut self, contents: impl IntoIterator<Item = AnyElement>) -> Self {
+        self.items
+            .extend(contents.into_iter().map(ToolbarItem::Content));
+        self
+    }
+}
+
+/// Generic [`ParentElement`] extension treats elements as non-sized content.
+/// Prefer the inherent `child` / `children` methods for controls that should
+/// inherit the toolbar size.
+impl ParentElement for Toolbar {
+    fn extend(&mut self, elements: impl IntoIterator<Item = AnyElement>) {
+        self.items
+            .extend(elements.into_iter().map(ToolbarItem::Content));
+    }
+}
+
+impl Styled for Toolbar {
+    fn style(&mut self) -> &mut StyleRefinement {
+        &mut self.style
+    }
+}
+
+impl Sizable for Toolbar {
+    fn with_size(mut self, size: impl Into<Size>) -> Self {
+        self.size = match size.into() {
+            Size::Large => Size::Medium,
+            size => size,
+        };
+        self
+    }
+}
+
+impl RenderOnce for Toolbar {
+    fn render(self, _: &mut Window, cx: &mut App) -> impl IntoElement {
+        let size = self.size;
+        let items = self.items.into_iter().map(|item| item.into_element(size));
+
+        BaseToolbar::new(self.id)
+            .disabled(self.disabled)
+            .flex_row_dir(cx)
+            .items_center()
+            .flex_shrink_0()
+            .map(|this| match size {
+                Size::XSmall => this.min_h_7().p_1().gap_1().text_xs(),
+                Size::Small => this.min_h_8().p_1().gap_1().text_sm(),
+                _ => this.min_h_12().p_2().gap_2().text_sm(),
+            })
+            .refine_style(&self.style)
+            .children(items)
+    }
+}

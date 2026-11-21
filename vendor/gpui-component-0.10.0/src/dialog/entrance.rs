@@ -1,0 +1,107 @@
+use gpui::{
+    AnyElement, App, Bounds, Element, ElementId, GlobalElementId, InspectorElementId, LayoutId,
+    Pixels, Window, point, px,
+};
+use serde::{Deserialize, Serialize};
+
+/// The entrance presentation shared by Dialog and AlertDialog.
+///
+/// Closing animates the surface and backdrop back out. Reduced motion displays
+/// the final state for every option, and [`DialogEntrance::None`] opens and
+/// closes in a single frame.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[non_exhaustive]
+pub enum DialogEntrance {
+    /// Slide down from the window top while fading in, preserving the legacy entrance.
+    #[default]
+    SlideDown,
+    /// Fade in at the final position without movement.
+    Fade,
+    /// Fade in while settling from just above the final position.
+    ///
+    /// Travel comes from the theme's short motion distance and is limited by
+    /// the space above the resolved surface inside the window.
+    FadeSlide,
+    /// Show the surface and backdrop immediately without entrance animation.
+    None,
+}
+
+/// Applies presentation travel after Positioner has resolved the resting bounds.
+/// Paint, hit testing, and accessibility follow the same offset.
+pub(super) struct EntranceSurface {
+    child: AnyElement,
+    travel: Pixels,
+    top_limit: Pixels,
+    pub(super) progress: f32,
+}
+
+impl EntranceSurface {
+    pub(super) fn new(child: AnyElement, travel: Pixels, top_limit: Pixels) -> Self {
+        Self {
+            child,
+            travel,
+            top_limit,
+            progress: 0.,
+        }
+    }
+}
+
+#[cfg(not(feature = "gpui-fast"))]
+impl gpui::IntoElement for EntranceSurface {
+    type Element = Self;
+
+    fn into_element(self) -> Self::Element {
+        self
+    }
+}
+
+impl Element for EntranceSurface {
+    type RequestLayoutState = ();
+    type PrepaintState = ();
+
+    fn id(&self) -> Option<ElementId> {
+        None
+    }
+
+    fn source_location(&self) -> Option<&'static std::panic::Location<'static>> {
+        None
+    }
+
+    fn request_layout(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        window: &mut Window,
+        cx: &mut App,
+    ) -> (LayoutId, ()) {
+        (self.child.request_layout(window, cx), ())
+    }
+
+    fn prepaint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        bounds: Bounds<Pixels>,
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        let available = (bounds.top() - self.top_limit).max(px(0.));
+        let travel = self.travel.max(px(0.)).min(available);
+        let offset = point(px(0.), -travel * (1. - self.progress.clamp(0., 1.)));
+        window.with_element_offset(offset, |window| self.child.prepaint(window, cx));
+    }
+
+    fn paint(
+        &mut self,
+        _: Option<&GlobalElementId>,
+        _: Option<&InspectorElementId>,
+        _: Bounds<Pixels>,
+        _: &mut (),
+        _: &mut (),
+        window: &mut Window,
+        cx: &mut App,
+    ) {
+        self.child.paint(window, cx);
+    }
+}

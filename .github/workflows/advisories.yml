@@ -12,7 +12,7 @@ on:
     paths:
       - "**/Cargo.lock"
       - "**/yarn.lock"
-      - "src-tauri/deny.toml"
+      - "deny.toml"
 
 permissions:
   contents: read
@@ -20,10 +20,6 @@ permissions:
 jobs:
   javascript:
     runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        directory: [".", website]
     steps:
       - uses: actions/checkout@v7
         with:
@@ -32,8 +28,8 @@ jobs:
         with:
           node-version-file: .node-version
       - run: yarn install --frozen-lockfile
-        working-directory: ${{ matrix.directory }}
-      - run: node scripts/audit-dependencies.mjs "${{ matrix.directory }}"
+        working-directory: website
+      - run: node scripts/audit-dependencies.mjs website
   rust:
     runs-on: ubuntu-latest
     steps:
@@ -42,8 +38,8 @@ jobs:
           ref: ${{ inputs.revision || github.sha }}
       - uses: EmbarkStudios/cargo-deny-action@v2
         with:
-          manifest-path: src-tauri/Cargo.toml
-          rust-version: "1.95.0"
-          arguments: --locked --config src-tauri/deny.toml
+          manifest-path: Cargo.toml
+          rust-version: "1.98.0"
+          arguments: --locked --config deny.toml
           command: check
           command-arguments: advisories
