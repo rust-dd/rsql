@@ -15,7 +15,6 @@ Choose an installer from the [latest release](https://github.com/rust-dd/rsql/re
 | Platform | Architecture | Download |
 | --- | --- | --- |
 | macOS 15 or later | Apple Silicon | `RSQL_<version>_aarch64.dmg` |
-| macOS 15 or later | Intel | `RSQL_<version>_x64.dmg` |
 | Windows 10 or later | x64 | `-setup.exe` |
 | Linux | x86_64 | `.AppImage`, `.deb` or `.rpm` |
 
