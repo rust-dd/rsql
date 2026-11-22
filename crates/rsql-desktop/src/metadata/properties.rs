@@ -98,6 +98,56 @@ pub async fn read_on(
     if *object != actual {
         return Err(changed());
     }
+    let data = section_data(client, object, section).await?;
+    client
+        .batch_execute("COMMIT")
+        .await
+        .map_err(|e| Error::QueryFailed(e.to_string()))?;
+    Ok(data)
+}
+
+/// Reads sections for an opened dialog over one connection. The concurrent queries pipeline,
+/// and each section stays independent so one permission error doesn't fail the rest.
+pub async fn read_many(
+    client: &rsql_core::postgres::Client,
+    services: &ApplicationServices,
+    object: &ObjectRef,
+    sections: &[Section],
+    route: &rsql_core::services::ProjectTicket,
+) -> Result<Vec<Result<Content, Error>>, Error> {
+    if !route.is_current()
+        || !route.same_generation(&services.capture_project_ticket(&object.project)?)
+    {
+        return Err(Error::QueryFailed("Connection changed".into()));
+    }
+    let actual = if let Some(identity) = &object.routine_identity {
+        ObjectRef::routine(
+            &object.project,
+            routines::resolve_routine(client, identity).await?.identity,
+        )
+    } else {
+        ObjectRef::relation(
+            &object.project,
+            relations::load_relation(client, &object.schema, &object.name).await?,
+        )
+    };
+    if *object != actual {
+        return Err(changed());
+    }
+    Ok(futures_util::future::join_all(
+        sections
+            .iter()
+            .map(|&section| section_data(client, object, section)),
+    )
+    .await)
+}
+
+async fn section_data(
+    client: &rsql_core::postgres::Client,
+    object: &ObjectRef,
+    section: Section,
+) -> Result<Content, Error> {
+    let (schema, name) = (&object.schema, &object.name);
     let data = match section {
         Section::Overview => {
             let rows = match object.kind {
@@ -242,9 +292,5 @@ pub async fn read_on(
             Content::Ddl(ddl.into())
         }
     };
-    client
-        .batch_execute("COMMIT")
-        .await
-        .map_err(|e| Error::QueryFailed(e.to_string()))?;
     Ok(data)
 }

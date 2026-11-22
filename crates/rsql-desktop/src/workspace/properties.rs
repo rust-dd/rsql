@@ -209,9 +209,7 @@ impl Workspace {
                     )
                 })
         });
-        for section in sections {
-            self.load_property(section, w, cx);
-        }
+        self.load_properties(sections, w, cx);
         cx.notify();
     }
 
@@ -250,10 +248,81 @@ impl Workspace {
             .copied()
             .filter(|s| !p.sections.contains_key(s))
             .collect::<Vec<_>>();
-        for section in missing {
-            self.load_property(section, w, cx);
-        }
+        self.load_properties(missing, w, cx);
         cx.notify();
+    }
+
+    fn load_properties(&mut self, sections: Vec<Section>, w: &mut Window, cx: &mut Context<Self>) {
+        if sections.len() < 2 {
+            for section in sections {
+                self.load_property(section, w, cx);
+            }
+            return;
+        }
+        let Some(p) = self.properties.as_mut() else {
+            return;
+        };
+        let (id, object) = (p.id, p.object.clone());
+        let svc = self.session.services.clone();
+        let route = p.capture.route.clone();
+        let mut generation = p.capture.generation.clone();
+        let mut stop = self.session.preflight_stop.subscribe();
+        let mut cancelled = Vec::new();
+        let mut revisions = Vec::new();
+        for &section in &sections {
+            let (cancel, receiver) = oneshot::channel();
+            let revision = Uuid::new_v4();
+            p.sections.insert(
+                section,
+                LoadState::Loading {
+                    revision,
+                    _cancel: cancel,
+                },
+            );
+            cancelled.push(receiver);
+            revisions.push((section, revision));
+        }
+        let job = self.session.runtime.spawn(async move {
+            svc.run_metadata(
+                &object.project,
+                async {
+                    tokio::select! {
+                        _ = futures_util::future::select_all(cancelled) => (),
+                        _ = stop.wait_for(|s| *s) => (),
+                        _ = generation.changed() => (),
+                    }
+                },
+                async |client| {
+                    properties::read_many(client, &svc, &object, &sections, &route).await
+                },
+            )
+            .await
+        });
+        cx.spawn_in(w, async move |view, cx| {
+            let results = job
+                .await
+                .map_err(|e| e.to_string())
+                .and_then(|r| r.map_err(|e| e.to_string()));
+            let _ = view.update(cx, |v, cx| match results {
+                Ok(results) => {
+                    for ((section, revision), result) in revisions.into_iter().zip(results) {
+                        v.publish_property(
+                            id,
+                            section,
+                            revision,
+                            result.map_err(|e| e.to_string()),
+                            cx,
+                        );
+                    }
+                }
+                Err(error) => {
+                    for (section, revision) in revisions {
+                        v.publish_property(id, section, revision, Err(error.clone()), cx);
+                    }
+                }
+            });
+        })
+        .detach();
     }
 
     fn load_property(&mut self, section: Section, w: &mut Window, cx: &mut Context<Self>) {
