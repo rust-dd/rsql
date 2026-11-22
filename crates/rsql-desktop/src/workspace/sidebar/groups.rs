@@ -122,6 +122,7 @@ impl Workspace {
                 .to_string(),
         );
         databases.expanded = Some(databases_open);
+        databases.loading = discovery_status.iter().any(|(_, error)| error.is_none());
         block = block.child(
             databases
                 .paint(format!("databases-{}", first.id), cx)
@@ -141,6 +142,7 @@ impl Workspace {
                 }
             }
             for (profile, error) in discovery_status {
+                let Some(error) = error else { continue };
                 let mut row = div()
                     .id(format!("database-discovery-{}", profile.id))
                     .test_support()
@@ -149,25 +151,19 @@ impl Workspace {
                     .gap_2()
                     .pl(px(28.))
                     .text_xs()
-                    .text_color(theme.muted_foreground);
-                if let Some(error) = error {
-                    let message = format!("{}: {error}", profile.display_name());
-                    row = row
-                        .text_color(theme.danger)
-                        .aria_label(message.clone())
-                        .child(div().min_w_0().truncate().child(message));
-                    if let Some(target) = catalog::Capture::new(self, &profile.id) {
-                        row = row.child(
-                            self.button("Retry", cx, move |v, _, cx| {
-                                v.retry_database_discovery(&target, cx)
-                            })
-                            .small()
-                            .ghost(),
-                        );
-                    }
-                } else {
-                    let message = format!("Loading databases for {}…", profile.display_name());
-                    row = row.aria_label(message.clone()).child(message);
+                    .text_color(theme.danger);
+                let message = format!("{}: {error}", profile.display_name());
+                row = row
+                    .aria_label(message.clone())
+                    .child(div().min_w_0().truncate().child(message));
+                if let Some(target) = catalog::Capture::new(self, &profile.id) {
+                    row = row.child(
+                        self.button("Retry", cx, move |v, _, cx| {
+                            v.retry_database_discovery(&target, cx)
+                        })
+                        .small()
+                        .ghost(),
+                    );
                 }
                 block = block.child(row);
             }

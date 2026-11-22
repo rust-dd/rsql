@@ -1,5 +1,5 @@
 use super::*;
-use gpui_kit::prelude::FluentBuilder;
+use gpui_kit::{component::Sizable, prelude::FluentBuilder};
 
 pub(in crate::workspace) struct TreeRow {
     pub depth: usize,
@@ -94,17 +94,23 @@ impl TreeRow {
                     .justify_center()
                     .text_color(theme.muted_foreground)
                     .children(self.expanded.map(|open| {
-                        glyph(
-                            if self.loading {
-                                IconName::LoaderCircle
-                            } else if open {
-                                IconName::ChevronDown
-                            } else {
-                                IconName::ChevronRight
-                            },
-                            12.,
-                            theme.muted_foreground,
-                        )
+                        if self.loading {
+                            gpui_kit::component::spinner::Spinner::new()
+                                .with_size(px(12.))
+                                .color(theme.muted_foreground)
+                                .into_any_element()
+                        } else {
+                            glyph(
+                                if open {
+                                    IconName::ChevronDown
+                                } else {
+                                    IconName::ChevronRight
+                                },
+                                12.,
+                                theme.muted_foreground,
+                            )
+                            .into_any_element()
+                        }
                     })),
             )
             .child(

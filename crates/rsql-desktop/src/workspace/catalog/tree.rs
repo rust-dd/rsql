@@ -259,7 +259,8 @@ impl Workspace {
                     ));
                 }
             }
-            _ => row = row.child("Loading…"),
+            // The header row's spinner already shows a pending load, as in the legacy tree.
+            _ => {}
         }
         row
     }
