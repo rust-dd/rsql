@@ -96,13 +96,14 @@ impl Workspace {
                     .text_color(theme.foreground)
                     .child(title),
             )
-            .child(Icon::new(IconName::ChevronDown).size(px(12.)));
+            .child(Icon::new(IconName::ChevronsUpDown).size(px(12.)));
         let Some((tab, original_project)) = target else {
             return trigger.disabled(true).into_any_element();
         };
         let owner = cx.weak_entity();
         trigger
-            .dropdown_menu(move |mut menu, _, cx| {
+            .dropdown_menu(move |menu, w, cx| {
+                let mut menu = crate::workspace::theme::controls::context_menu(menu, w);
                 let Some(workspace) = owner.upgrade() else {
                     return menu;
                 };
