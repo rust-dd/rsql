@@ -22,7 +22,7 @@ use std::sync::{
     atomic::{AtomicBool, Ordering},
 };
 
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, PartialEq)]
 enum Mode {
     New,
     Edit,
@@ -54,6 +54,7 @@ impl Drop for RouteJob {
 pub(super) struct Form {
     profile: ConnectionProfile,
     mode: Mode,
+    window: AnyWindowHandle,
     fields: Vec<Entity<InputState>>,
     url: Entity<InputState>,
     ssl: Entity<SslState>,
@@ -209,6 +210,7 @@ impl Workspace {
         self.navigation.form = Some(Form {
             profile,
             mode,
+            window: w.window_handle(),
             fields,
             url,
             ssl,
@@ -228,11 +230,26 @@ impl Workspace {
             connecting: None,
             feedback: None,
         });
-        if !self.navigation.modal_open {
+        // A sidebar reconnect runs without the dialog, like the legacy app, unless it needs input.
+        if mode != Mode::Reconnect && !self.navigation.modal_open {
             self.navigation.modal_open = true;
             content::open(&cx.entity(), w, cx);
         }
         cx.notify();
+    }
+
+    fn reveal_form(&mut self, cx: &mut Context<Self>) {
+        let Some(window) = self.navigation.form.as_ref().map(|f| f.window) else {
+            return;
+        };
+        if self.navigation.modal_open {
+            return;
+        }
+        self.navigation.modal_open = true;
+        let owner = cx.entity();
+        cx.defer(move |cx| {
+            let _ = window.update(cx, |_, w, cx| content::open(&owner, w, cx));
+        });
     }
 
     fn invalidate_form(&mut self, cx: &mut Context<Self>) {
@@ -501,6 +518,7 @@ impl Workspace {
             Outcome::Trust(challenge) => {
                 f.challenge = Some((challenge, op, p));
                 f.feedback = None;
+                self.reveal_form(cx);
             }
             Outcome::Feedback(feedback) => {
                 if op == Operation::Connect {
@@ -511,6 +529,9 @@ impl Workspace {
                 if op == Operation::Connect {
                     f.connecting = None;
                     self.navigation.status.insert(p.id, "Failed".into());
+                    if !self.navigation.modal_open {
+                        self.close_form(cx);
+                    }
                 }
             }
         }
