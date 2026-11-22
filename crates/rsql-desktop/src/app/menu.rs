@@ -1,6 +1,7 @@
 use super::*;
 use crate::workspace::theme::controls::compact_button;
-use gpui_kit::component::{WindowExt, button::Button, label::Label};
+use crate::workspace::theme::dialog;
+use gpui_kit::component::{WindowExt, button::Button};
 
 actions!(
     rsql,
@@ -20,19 +21,47 @@ fn active_window(cx: &mut App, f: impl FnOnce(&mut Window, &mut App) + 'static) 
 
 pub(super) fn bind(cx: &mut App) {
     cx.on_action(|_: &About, cx| {
+        #[cfg(target_os = "macos")]
+        if let Some(main) = objc2_foundation::MainThreadMarker::new() {
+            // The legacy app showed the system panel, which reads the bundle's name, version and icon.
+            objc2_app_kit::NSApplication::sharedApplication(main)
+                .orderFrontStandardAboutPanel(None);
+            return;
+        }
         active_window(cx, |w, cx| {
-            w.open_dialog(cx, |dialog, _, _| {
-                let mut panel = dialog
-                    .title(Label::new(format!("About {}", profile::NAME)))
-                    .w(px(360.))
-                    .child(Label::new(format!("Version {}", env!("CARGO_PKG_VERSION"))));
-                if let Some(revision) = option_env!("RSQL_REVISION") {
-                    panel = panel.child(Label::new(format!("Build {}", &revision[..12])));
-                }
-                panel.child("Modern SQL client for PostgreSQL.").child(
-                    compact_button(Button::new("about-website").label(profile::WEBSITE)).on_click(
-                        |_, _, cx| crate::desktop::DesktopServices::open_url(cx, profile::WEBSITE),
+            w.open_dialog(cx, |host, _, cx| {
+                let version = match option_env!("RSQL_REVISION") {
+                    Some(revision) => format!(
+                        "Version {} ({})",
+                        env!("CARGO_PKG_VERSION"),
+                        &revision[..12]
                     ),
+                    None => format!("Version {}", env!("CARGO_PKG_VERSION")),
+                };
+                dialog::surface(host, "About RSQL", px(360.), cx).child(
+                    div()
+                        .relative()
+                        .p_6()
+                        .child(dialog::header("about-title", "About RSQL", version, cx))
+                        .child(
+                            div()
+                                .text_size(px(14.))
+                                .child("Modern SQL client for PostgreSQL."),
+                        )
+                        .child(
+                            div().flex().justify_end().mt(px(20.)).child(
+                                compact_button(
+                                    Button::new("about-website").label(profile::WEBSITE),
+                                )
+                                .on_click(|_, _, cx| {
+                                    crate::desktop::DesktopServices::open_url(cx, profile::WEBSITE)
+                                }),
+                            ),
+                        )
+                        .child(
+                            dialog::close_button("about-close", false, cx)
+                                .on_click(|_, w, cx| w.close_dialog(cx)),
+                        ),
                 )
             });
         })
