@@ -169,27 +169,6 @@ impl Panel {
         })
     }
 
-    pub(in crate::workspace::properties) fn text_block(
-        &self,
-        value: &PropertyText,
-        copy: Option<&'static str>,
-        cx: &App,
-    ) -> Div {
-        let mut content = div().flex().flex_col().min_w_0();
-        if value.full.is_empty() {
-            return content.child("Unavailable");
-        }
-        if let Some(label) = copy.or_else(|| value.abbreviated().then_some("Copy full text")) {
-            content = content.child(div().flex().justify_end().child(toolbar_button(
-                self.copy_value(label, value),
-                IconName::Copy,
-                label,
-                cx,
-            )));
-        }
-        content.child(code_text(value, cx))
-    }
-
     pub(super) fn ddl(&self, p: &Properties, text: &PropertyText, cx: &App) -> Div {
         if text.full.is_empty() {
             return empty("No DDL available", IconName::FileCode, cx);
@@ -242,7 +221,7 @@ impl Panel {
                     ("", 36.),
                     ("Index Name", 0.),
                     ("Columns", 0.),
-                    ("Type", 105.),
+                    ("Type", 120.),
                 ],
                 cx,
             ));
@@ -279,90 +258,68 @@ impl Panel {
                 )
             };
             body = body.child(
-                row(("index", index.oid as usize), cx)
-                    .py(px(8.))
-                    .flex_col()
-                    .child(
-                        grid()
-                            .w_full()
-                            .child(cell(36., icon(glyph, 12., glyph_color)))
-                            .child(
-                                cell(
-                                    0.,
-                                    Label::new(index.name.clone())
-                                        .font_weight(FontWeight::MEDIUM)
-                                        .line_height(px(16.5)),
-                                )
-                                .id(("index-track", 1usize))
-                                .test_support(),
+                row(("index", index.oid as usize), cx).py(px(8.)).child(
+                    grid()
+                        .w_full()
+                        .child(cell(36., icon(glyph, 12., glyph_color)))
+                        .child(
+                            cell(
+                                0.,
+                                Label::new(index.name.clone())
+                                    .font_weight(FontWeight::MEDIUM)
+                                    .line_height(px(16.5)),
                             )
-                            .child(
-                                cell(
-                                    0.,
-                                    div()
-                                        .child(
-                                            Label::new(SharedString::from(&index.columns.preview))
-                                                .line_height(px(16.5))
-                                                .text_color(theme.muted_foreground.opacity(0.7)),
-                                        )
-                                        .when(index.columns.abbreviated(), |d| {
-                                            d.child(toolbar_button(
-                                                self.copy_value(
-                                                    "Copy index columns",
-                                                    &index.columns,
-                                                ),
-                                                IconName::Copy,
-                                                "Copy index columns",
-                                                cx,
-                                            ))
-                                        }),
-                                )
-                                .id(("index-track", 2usize))
-                                .test_support(),
+                            .id(("index-track", 1usize))
+                            .test_support(),
+                        )
+                        .child(
+                            cell(
+                                0.,
+                                div()
+                                    .child(
+                                        Label::new(SharedString::from(&index.columns.preview))
+                                            .line_height(px(16.5))
+                                            .text_color(theme.muted_foreground.opacity(0.7)),
+                                    )
+                                    .when(index.columns.abbreviated(), |d| {
+                                        d.child(toolbar_button(
+                                            self.copy_value("Copy index columns", &index.columns),
+                                            IconName::Copy,
+                                            "Copy index columns",
+                                            cx,
+                                        ))
+                                    }),
                             )
-                            .child(
-                                cell(
-                                    105.,
+                            .id(("index-track", 2usize))
+                            .test_support(),
+                        )
+                        .child(
+                            cell(
+                                120.,
+                                div().flex().items_start().child(
                                     div()
-                                        .flex()
-                                        .flex_col()
-                                        .items_start()
+                                        .id("index-role-pill")
+                                        .test_support()
+                                        .px(px(8.))
+                                        .py(px(2.))
+                                        .whitespace_nowrap()
+                                        .rounded_full()
+                                        .border_1()
+                                        .border_color(border)
+                                        .bg(fill)
                                         .child(
-                                            div()
-                                                .id("index-role-pill")
-                                                .test_support()
-                                                .px(px(8.))
-                                                .py(px(2.))
-                                                .rounded_full()
-                                                .border_1()
-                                                .border_color(border)
-                                                .bg(fill)
-                                                .child(
-                                                    Label::new(label)
-                                                        .text_size(px(9.))
-                                                        .font_weight(FontWeight::SEMIBOLD)
-                                                        .line_height(px(13.5))
-                                                        .text_color(text),
-                                                ),
-                                        )
-                                        .child(
-                                            Label::new(index.method.clone())
-                                                .text_size(px(10.))
-                                                .line_height(px(15.))
-                                                .text_color(theme.muted_foreground),
+                                            Label::new(label)
+                                                .text_size(px(9.))
+                                                .font_weight(FontWeight::SEMIBOLD)
+                                                .line_height(px(13.5))
+                                                .text_color(text),
                                         ),
-                                )
-                                .id(("index-track", 3usize))
-                                .test_support(),
-                            ),
-                    )
-                    .child(
-                        div()
-                            .w_full()
-                            .pl(px(48.))
-                            .pr(px(12.))
-                            .child(self.text_block(&index.definition, None, cx)),
-                    ),
+                                ),
+                            )
+                            .id(("index-track", 3usize))
+                            .test_support(),
+                        ),
+                ),
             );
         }
         div()
