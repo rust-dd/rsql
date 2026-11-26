@@ -295,10 +295,10 @@
   resolved "https://registry.yarnpkg.com/@biomejs/cli-win32-x64/-/cli-win32-x64-2.6.7.tgz#3e7ddfc4dcb742b33058c60ec74f41d4cd249e69"
   integrity sha512-uYfH+n+IAtVz3lh7m6JxdjxfJ3WCvAJDE3spHIUbU955V42oKymlhiQiu92fAhXZb7KOjvRcrfImySQbc1MFFg==
 
-"@electric-sql/pglite@^0.2.17":
-  version "0.2.17"
-  resolved "https://registry.npmjs.org/@electric-sql/pglite/-/pglite-0.2.17.tgz#23d53a9b7ddd1590d59d7c701aba23b037f08108"
-  integrity sha512-qEpKRT2oUaWDH6tjRxLHjdzMqRUGYDnGZlKrnL4dJ77JVMcP2Hpo3NYnOSPKdZdeec57B6QPprCUFg0picx5Pw==
+"@electric-sql/pglite@^0.5.16":
+  version "0.5.16"
+  resolved "https://registry.yarnpkg.com/@electric-sql/pglite/-/pglite-0.5.16.tgz#6a844eea4838cba9841366b0036183f484a70cf0"
+  integrity sha512-Nj8KcIsJL748W408U2N8q4+9IlONdpRIU8MJypIAAINMJ5nqKyqpX7Mgg/5XKkXiAib3AoZGR6hnJFlrlLBrcg==
 
 "@emnapi/core@^1.11.3":
   version "1.11.3"
