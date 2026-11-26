@@ -39,7 +39,7 @@ Expand the sidebar to browse schemas and tables. Use the command palette to find
 
 ### Write and organize SQL
 
-- **Schema-aware completion:** Monaco editor with suggestions for schemas, tables, views, columns, functions and table aliases, plus SQL snippets and formatting.
+- **Schema-aware completion:** native SQL editor with suggestions for schemas, tables, views, columns, functions and table aliases, plus SQL snippets and formatting.
 - **Tabs and split view:** work on several queries, compare queries side by side, and save workspaces for later.
 - **Saved queries and history:** keep queries for reuse and browse the last 500 executions in the current session.
 - **Execution controls:** cancel a running query or set a statement timeout per tab. Scripts can contain multiple statements; the last result set is displayed.
@@ -47,7 +47,7 @@ Expand the sidebar to browse schemas and tables. Use the command palette to find
 
 ### Inspect and edit data
 
-- **Results grid:** canvas rendering with pages loaded from Rust as you scroll through large results.
+- **Results grid:** native grid that loads result pages as you scroll through large results.
 - **Data editing:** update and delete rows in eligible single-table results, then apply changes together in one transaction. The query must include the table's primary key.
 - **Result tools:** search cells, inspect a row in Record view, follow foreign keys, and compare results against a pinned snapshot.
 - **Import and export:** import CSV with column mapping; export to CSV, JSON, SQL `INSERT`, Markdown or XML. Paged results support CSV export.
@@ -85,7 +85,7 @@ Use **Cmd** on macOS and **Ctrl** on Windows and Linux.
 
 ## Result limits
 
-The main query pane uses 2,000-row pages by default. Larger results stay in Rust and are fetched by the grid as needed.
+The main query pane uses 2,000-row pages by default. Larger results stay in the result cache, and the grid fetches pages as needed.
 
 | Capability | Up to 2,000 rows | More than 2,000 rows |
 | --- | --- | --- |

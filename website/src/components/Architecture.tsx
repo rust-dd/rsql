@@ -16,7 +16,7 @@ export function Architecture() {
               <span>Your rules.</span>
             </h2>
             <p>
-              A desktop app with a Rust core, a system WebView, and a simple idea: your database
+              A native desktop app written in Rust, with no WebView, and a simple idea: your database
               tools should work for you.
             </p>
             <a className="text-link" href={REPOSITORY_URL}>
@@ -29,7 +29,7 @@ export function Architecture() {
               <Monitor size={30} />
               <span>YOUR MACHINE</span>
               <strong>RSQL</strong>
-              <small>Rust + Tauri</small>
+              <small>Rust + GPUI</small>
             </div>
             <div className="diagram-path">
               <span />
@@ -54,12 +54,12 @@ export function Architecture() {
             {
               icon: Zap,
               title: "A focused foundation",
-              text: "Rust handles database work. Tauri uses your system’s WebView. Purpose-built for PostgreSQL.",
+              text: "Rust from the database driver to the GPU-rendered UI. No WebView. Purpose-built for PostgreSQL.",
             },
             {
               icon: Layers,
               title: "Room for real results",
-              text: "A canvas grid and paged results keep large datasets practical to explore, with explicit memory limits.",
+              text: "A native grid and paged results keep large datasets practical to explore, with explicit memory limits.",
             },
             {
               icon: Code2,

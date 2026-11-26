@@ -30,7 +30,7 @@ const questions = [
   {
     question: "Can I work with large query results?",
     answer:
-      "Yes. RSQL loads result pages as you scroll through the canvas grid. Each result retains up to one million rows within a 256 MiB budget shared by cached results and running paged queries. Results that reach a limit are marked as truncated.",
+      "Yes. RSQL loads result pages as you scroll through the results grid. Each result retains up to one million rows within a 256 MiB budget shared by cached results and running paged queries. Results that reach a limit are marked as truncated.",
   },
 ];
 

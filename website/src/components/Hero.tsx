@@ -57,7 +57,7 @@ export function Hero() {
           <strong>Built around your workflow.</strong>
         </span>
         <div>
-          <span>RUST + TAURI</span>
+          <span>RUST + GPUI</span>
           <span>MIT LICENSED</span>
           <span>NO TELEMETRY</span>
         </div>
